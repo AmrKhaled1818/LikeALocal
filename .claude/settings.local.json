@@ -25,7 +25,9 @@
       "Bash(dart analyze *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyD-pVCLJ0AqnSi9omm2ut1Ju8dyuDcM7oY\" -H \"content-type: application/json\" -d \"{\\\\\"contents\\\\\":[{\\\\\"role\\\\\":\\\\\"user\\\\\",\\\\\"parts\\\\\":[{\\\\\"text\\\\\":\\\\\"hi\\\\\"}]}],\\\\\"generationConfig\\\\\":{\\\\\"maxOutputTokens\\\\\":50,\\\\\"thinkingConfig\\\\\":{\\\\\"thinkingBudget\\\\\":0}}}\")",
       "Bash(curl -s -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyD-pVCLJ0AqnSi9omm2ut1Ju8dyuDcM7oY\" -H \"content-type: application/json\" -d \"{\\\\\"contents\\\\\":[{\\\\\"role\\\\\":\\\\\"user\\\\\",\\\\\"parts\\\\\":[{\\\\\"text\\\\\":\\\\\"hi\\\\\"}]}],\\\\\"generationConfig\\\\\":{\\\\\"maxOutputTokens\\\\\":50,\\\\\"thinkingConfig\\\\\":{\\\\\"thinkingBudget\\\\\":0}}}\")",
-      "Bash(flutter build *)"
+      "Bash(flutter build *)",
+      "Bash(grep -rl \"location_service\\\\|LocationService\" lib/)",
+      "Bash(grep -rl \"auth_repo\\\\|AuthRepo\" lib/)"
     ]
   }
 }
