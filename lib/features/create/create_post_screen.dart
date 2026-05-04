@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../data/models/post_model.dart';
@@ -28,6 +31,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   File? _selectedImage;
   String _selectedCategory = 'Restaurant';
   bool _posting = false;
+  double? _pickedLat;
+  double? _pickedLng;
 
   static const _categories = [
     'Restaurant',
@@ -122,7 +127,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                             Icon(Icons.add_photo_alternate_outlined,
                                 size: 48, color: kMutedFg),
                             SizedBox(height: 8),
-                            Text('Add a photo',
+                            Text('Add a photo (optional)',
                                 style: TextStyle(
                                     color: kMutedFg, fontSize: 14)),
                           ],
@@ -162,7 +167,112 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.location_on_outlined,
                       color: kMutedFg, size: 20),
-                  hintText: 'Where is this hidden gem?',
+                  hintText: 'Neighbourhood / area name',
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Map pin picker
+              GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push<LatLng>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => _LocationPickerScreen(
+                        initial: (_pickedLat != null && _pickedLng != null)
+                            ? LatLng(_pickedLat!, _pickedLng!)
+                            : null,
+                      ),
+                    ),
+                  );
+                  if (result != null) {
+                    setState(() {
+                      _pickedLat = result.latitude;
+                      _pickedLng = result.longitude;
+                    });
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: _pickedLat != null ? 160 : 48,
+                  decoration: BoxDecoration(
+                    color: kMuted,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _pickedLat != null ? kOrange : kMutedFg.withValues(alpha: 0.3),
+                      width: _pickedLat != null ? 2 : 1,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _pickedLat != null
+                      ? Stack(
+                          children: [
+                            FlutterMap(
+                              options: MapOptions(
+                                initialCenter: LatLng(_pickedLat!, _pickedLng!),
+                                initialZoom: 15,
+                                interactionOptions: const InteractionOptions(
+                                  flags: InteractiveFlag.none,
+                                ),
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate:
+                                      'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}',
+                                  additionalOptions: const {
+                                    'api_key': AppConfig.stadiaApiKey
+                                  },
+                                  userAgentPackageName:
+                                      'com.example.like_a_local',
+                                ),
+                                MarkerLayer(markers: [
+                                  Marker(
+                                    point: LatLng(_pickedLat!, _pickedLng!),
+                                    width: 36,
+                                    height: 36,
+                                    child: const Icon(Icons.location_pin,
+                                        color: kOrange, size: 36),
+                                  ),
+                                ]),
+                              ],
+                            ),
+                            Positioned(
+                              bottom: 6,
+                              right: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.edit_location_alt_outlined,
+                                        size: 14, color: kOrange),
+                                    SizedBox(width: 4),
+                                    Text('Change pin',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: kOrange,
+                                            fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.pin_drop_outlined,
+                                color: kMutedFg, size: 20),
+                            SizedBox(width: 8),
+                            Text('Tap to pin location on map',
+                                style: TextStyle(
+                                    color: kMutedFg, fontSize: 14)),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -285,15 +395,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Future<void> _submitPost() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add a photo'),
-          backgroundColor: kDestructive,
-        ),
-      );
-      return;
-    }
 
     setState(() => _posting = true);
     try {
@@ -313,6 +414,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         location: _locationCtrl.text.trim(),
+        lat: _pickedLat ?? 0.0,
+        lng: _pickedLng ?? 0.0,
         localTips: _tipsCtrl.text.trim(),
         recommendedDishes: dishes,
         category: _selectedCategory,
@@ -347,5 +450,142 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     } finally {
       if (mounted) setState(() => _posting = false);
     }
+  }
+}
+
+// ── Full-screen map location picker ──────────────────────────────────────────
+
+class _LocationPickerScreen extends StatefulWidget {
+  final LatLng? initial;
+  const _LocationPickerScreen({this.initial});
+
+  @override
+  State<_LocationPickerScreen> createState() => _LocationPickerScreenState();
+}
+
+class _LocationPickerScreenState extends State<_LocationPickerScreen> {
+  static const _cairoCenter = LatLng(30.0444, 31.2357);
+  LatLng? _picked;
+
+  @override
+  void initState() {
+    super.initState();
+    _picked = widget.initial;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: kDark,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Pick Location',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        actions: [
+          TextButton(
+            onPressed: _picked == null ? null : () => Navigator.pop(context, _picked),
+            child: Text(
+              'Confirm',
+              style: TextStyle(
+                color: _picked == null ? Colors.white38 : kOrange,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: widget.initial ?? _cairoCenter,
+              initialZoom: 14,
+              onTap: (_, latLng) => setState(() => _picked = latLng),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate:
+                    'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}',
+                additionalOptions: const {'api_key': AppConfig.stadiaApiKey},
+                userAgentPackageName: 'com.example.like_a_local',
+              ),
+              if (_picked != null)
+                MarkerLayer(markers: [
+                  Marker(
+                    point: _picked!,
+                    width: 40,
+                    height: 40,
+                    child: const Icon(Icons.location_pin,
+                        color: kOrange, size: 40),
+                  ),
+                ]),
+            ],
+          ),
+          // Instruction banner
+          Positioned(
+            top: 12,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 8)
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.touch_app_outlined,
+                      color: kOrange, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    _picked == null
+                        ? 'Tap anywhere on the map to drop a pin'
+                        : 'Tap again to move the pin',
+                    style: const TextStyle(fontSize: 13, color: kDark),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Coordinates badge
+          if (_picked != null)
+            Positioned(
+              bottom: 24,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: kDark,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on, color: kOrange, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_picked!.latitude.toStringAsFixed(5)}, ${_picked!.longitude.toStringAsFixed(5)}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontFamily: 'monospace'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
