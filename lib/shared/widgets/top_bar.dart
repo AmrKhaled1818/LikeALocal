@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -16,7 +17,6 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      backgroundColor: kDark,
       leading: IconButton(
         icon: const Icon(Icons.menu, color: Colors.white),
         onPressed: () => scaffoldKey?.currentState?.openDrawer(),
@@ -24,15 +24,10 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [kOrange, Color(0xFFFF6B9D)],
-              ),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Icon(Icons.layers_rounded, color: Colors.white, size: 18),
+          SvgPicture.asset(
+            'assets/icons/icon.svg',
+            width: 24,
+            height: 24,
           ),
           const SizedBox(width: 8),
           const Text(

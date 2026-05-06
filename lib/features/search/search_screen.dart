@@ -98,7 +98,6 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       body: SafeArea(
         child: Column(
           children: [
@@ -124,7 +123,7 @@ class _SearchScreenState extends State<SearchScreen>
           const Text(
             'Explore',
             style: TextStyle(
-                fontSize: 22, fontWeight: FontWeight.bold, color: kDark),
+                fontSize: 22, fontWeight: FontWeight.bold, color: null),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -173,7 +172,7 @@ class _SearchScreenState extends State<SearchScreen>
           const Text(
             'Trending',
             style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold, color: kDark),
+                fontSize: 16, fontWeight: FontWeight.bold, color: null),
           ),
           const SizedBox(height: 10),
           ..._trending.asMap().entries.map((e) => _TrendingTile(
@@ -193,7 +192,7 @@ class _SearchScreenState extends State<SearchScreen>
                   style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: kDark),
+                      color: null),
                 ),
                 const Spacer(),
                 GestureDetector(
@@ -209,7 +208,7 @@ class _SearchScreenState extends State<SearchScreen>
                       const Icon(Icons.history, color: kMutedFg, size: 20),
                   title: Text(r,
                       style:
-                          const TextStyle(fontSize: 14, color: kDark)),
+                          const TextStyle(fontSize: 14, color: null)),
                   onTap: () {
                     _searchCtrl.text = r;
                     _runSearch(r);
@@ -222,7 +221,7 @@ class _SearchScreenState extends State<SearchScreen>
           const Text(
             'Recommended For You',
             style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold, color: kDark),
+                fontSize: 16, fontWeight: FontWeight.bold, color: null),
           ),
           const SizedBox(height: 10),
           _RecommendedSection(),
@@ -342,7 +341,7 @@ class _PlaceResults extends StatelessWidget {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
-                                    color: kDark),
+                                    color: null),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -414,7 +413,7 @@ class _PlaceResults extends StatelessWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  color: kDark,
+                                  color: null,
                                   fontSize: 12,
                                   fontStyle: FontStyle.italic),
                             ),
@@ -519,7 +518,7 @@ class _TrendingTile extends StatelessWidget {
         ),
       ),
       title: Text(text,
-          style: const TextStyle(fontSize: 14, color: kDark)),
+          style: const TextStyle(fontSize: 14, color: null)),
       trailing:
           const Icon(Icons.trending_up, color: kMutedFg, size: 16),
       dense: true,

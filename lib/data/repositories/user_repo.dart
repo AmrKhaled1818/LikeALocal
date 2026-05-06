@@ -64,10 +64,14 @@ class UserRepo {
   }
 
   Future<List<UserModel>> searchUsers(String query) async {
+    final prefix = query.trim();
+    if (prefix.isEmpty) return [];
+    
+    final upper = '$prefix\uf8ff';
     final snap = await _db
         .collection('users')
-        .where('username', isGreaterThanOrEqualTo: query)
-        .where('username', isLessThanOrEqualTo: '$query')
+        .where('username', isGreaterThanOrEqualTo: prefix)
+        .where('username', isLessThanOrEqualTo: upper)
         .limit(20)
         .get();
     return snap.docs.map((d) => UserModel.fromMap(d.data())).toList();

@@ -4,9 +4,12 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/post_model.dart';
+import '../../data/repositories/user_repo.dart';
 import '../../data/services/ai_service.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/chat_provider.dart';
@@ -25,8 +28,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final _scrollCtrl = ScrollController();
   bool _sending = false;
   Position? _position;
+  String? _otherUsername;
+
+  int _todayAiCount = 0;
+  bool _limitLoaded = false;
+
+  static const _dailyLimit = 20;
 
   bool get _isAiChat => widget.chatId.startsWith('ai_');
+  bool get _limitReached => _limitLoaded && _todayAiCount >= _dailyLimit;
 
   @override
   void initState() {
@@ -34,8 +44,61 @@ class _ConversationScreenState extends State<ConversationScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = context.read<AuthProvider>();
       context.read<ChatProvider>().markRead(widget.chatId, auth.uid);
+      if (!_isAiChat) _loadOtherUsername(auth.uid);
+      if (_isAiChat) _loadAiUsage(auth.uid);
     });
     if (_isAiChat) _fetchLocation();
+  }
+
+  Future<void> _loadAiUsage(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final countKey = 'ai_count_$uid';
+    final resetKey = 'ai_reset_$uid';
+    final resetMs = prefs.getInt(resetKey);
+    final now = DateTime.now();
+    if (resetMs != null) {
+      final resetTime = DateTime.fromMillisecondsSinceEpoch(resetMs);
+      if (now.difference(resetTime).inHours >= 24) {
+        await prefs.setInt(countKey, 0);
+        await prefs.setInt(resetKey, now.millisecondsSinceEpoch);
+      }
+    } else {
+      await prefs.setInt(resetKey, now.millisecondsSinceEpoch);
+    }
+    if (mounted) {
+      setState(() {
+        _todayAiCount = prefs.getInt(countKey) ?? 0;
+        _limitLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _incrementAiCount(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final countKey = 'ai_count_$uid';
+    final newCount = (_todayAiCount + 1);
+    await prefs.setInt(countKey, newCount);
+    if (mounted) setState(() => _todayAiCount = newCount);
+  }
+
+  Future<void> _loadOtherUsername(String myUid) async {
+    try {
+      // chatId for DMs is the Firestore document ID; look up participants
+      final doc = await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .get();
+      if (!doc.exists) return;
+      final participants =
+          List<String>.from(doc.data()!['participants'] ?? []);
+      final otherUid =
+          participants.firstWhere((p) => p != myUid, orElse: () => '');
+      if (otherUid.isEmpty) return;
+      final user = await UserRepo().getUser(otherUid);
+      if (mounted && user != null) {
+        setState(() => _otherUsername = user.username);
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchLocation() async {
@@ -97,6 +160,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (text.isEmpty || _sending) return;
 
     final auth = context.read<AuthProvider>();
+    final isSuperUser = auth.userModel?.isSuperUser ?? false;
+
+    if (_isAiChat && !isSuperUser && _limitReached) return;
+
     final chatProvider = context.read<ChatProvider>();
     _msgCtrl.clear();
     setState(() => _sending = true);
@@ -132,6 +199,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           createdAt: Timestamp.now(),
         );
         await chatProvider.sendMessage(widget.chatId, aiMsg, 'ai');
+        if (!isSuperUser) await _incrementAiCount(auth.uid);
         _scrollToBottom();
       }
     } finally {
@@ -139,29 +207,55 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
-  List<PostModel> _findRelatedPosts(String aiText, List<PostModel> allPosts) {
-    final lower = aiText.toLowerCase();
+  List<PostModel> _findRelatedPosts(
+      String aiText, String userQuery, List<PostModel> allPosts) {
+    final searchText = '${aiText.toLowerCase()} ${userQuery.toLowerCase()}';
     final scored = <PostModel, int>{};
+
     for (final post in allPosts) {
       int score = 0;
-      final titleWords = post.title
-          .toLowerCase()
-          .split(RegExp(r'\W+'))
-          .where((w) => w.length > 3);
-      final locationWords = post.location
-          .toLowerCase()
-          .split(RegExp(r'\W+'))
-          .where((w) => w.length > 3);
-      for (final word in [...titleWords, ...locationWords]) {
-        if (lower.contains(word)) score++;
-      }
+
+      // Category exact match — strongest signal
       if (post.category.isNotEmpty &&
-          lower.contains(post.category.toLowerCase())) score += 2;
-      if (score > 0) scored[post] = score;
+          searchText.contains(post.category.toLowerCase())) {
+        score += 4;
+      }
+
+      // Title words
+      for (final word in post.title
+          .toLowerCase()
+          .split(RegExp(r'\W+'))
+          .where((w) => w.length > 3)) {
+        if (searchText.contains(word)) score += 2;
+      }
+
+      // Location words
+      for (final word in post.location
+          .toLowerCase()
+          .split(RegExp(r'\W+'))
+          .where((w) => w.length > 3)) {
+        if (searchText.contains(word)) score++;
+      }
+
+      // Distance bonus — posts closer to user rank higher
+      if (_position != null && (post.lat != 0 || post.lng != 0)) {
+        final dist = Geolocator.distanceBetween(
+          _position!.latitude, _position!.longitude,
+          post.lat, post.lng,
+        );
+        if (dist < 3000) score += 5;
+        else if (dist < 8000) score += 3;
+        else if (dist < 15000) score += 1;
+      }
+
+      // Require category + at least one title word (score ≥ 6) to avoid
+      // showing posts that only match by category but are the wrong place.
+      if (score >= 6) scored[post] = score;
     }
+
     final sorted = scored.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return sorted.take(3).map((e) => e.key).toList();
+    return sorted.take(2).map((e) => e.key).toList();
   }
 
   @override
@@ -170,9 +264,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final allPosts = context.watch<PostsProvider>().feedPosts;
 
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kDark,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => context.pop(),
@@ -180,7 +272,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
         title: _isAiChat
             ? const _AiAppBarTitle()
             : Text(
-                widget.chatId,
+                _otherUsername ?? 'Chat',
                 style:
                     const TextStyle(color: Colors.white, fontSize: 16),
               ),
@@ -198,66 +290,84 @@ class _ConversationScreenState extends State<ConversationScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_isAiChat) const _AiWelcomeBanner(),
-          Expanded(
-            child: StreamBuilder<List<MessageModel>>(
-              stream:
-                  context.read<ChatProvider>().getMessages(widget.chatId),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                      child:
-                          CircularProgressIndicator(color: kOrange));
-                }
-                final messages = snap.data ?? [];
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Text(
-                      _isAiChat
-                          ? 'Ask me about local spots, hidden gems, or travel tips!'
-                          : 'No messages yet. Say hello!',
-                      style: const TextStyle(color: kMutedFg),
-                      textAlign: TextAlign.center,
-                    ),
+      body: StreamBuilder<List<MessageModel>>(
+        stream: context.read<ChatProvider>().getMessages(widget.chatId),
+        builder: (context, snap) {
+          final messages = snap.data ?? [];
+          final isSuperUser = auth.userModel?.isSuperUser ?? false;
+          final limitReached = _isAiChat && !isSuperUser && _limitReached;
+          final todayAiMsgs = _todayAiCount;
+
+          Widget listWidget;
+          if (snap.connectionState == ConnectionState.waiting && messages.isEmpty) {
+            listWidget = const Center(
+                child: CircularProgressIndicator(color: kOrange));
+          } else if (messages.isEmpty) {
+            listWidget = Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_isAiChat) ...[
+                  const _AiWelcomeBanner(),
+                  const SizedBox(height: 16),
+                ],
+                Text(
+                  _isAiChat
+                      ? 'Ask me about local spots, hidden gems, or travel tips!'
+                      : 'No messages yet. Say hello!',
+                  style: const TextStyle(color: kMutedFg),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          } else {
+            _scrollToBottom();
+            listWidget = ListView.builder(
+              controller: _scrollCtrl,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              itemCount: messages.length + (_isAiChat ? 1 : 0),
+              itemBuilder: (_, i) {
+                if (_isAiChat && i == 0) {
+                  return const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: _AiWelcomeBanner(),
                   );
                 }
-                _scrollToBottom();
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  itemCount: messages.length,
-                  itemBuilder: (_, i) {
-                    final msg = messages[i];
-                    final isMe = msg.senderId == auth.uid;
-                    final isAi = msg.senderId == 'ai';
-                    final related = (isAi && _isAiChat)
-                        ? _findRelatedPosts(msg.text, allPosts)
-                        : <PostModel>[];
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _MessageBubble(
-                          message: msg,
-                          isMe: isMe,
-                          isAi: isAi,
-                          myUid: auth.uid,
-                        ),
-                        if (related.isNotEmpty)
-                          _RelatedPostsRow(posts: related),
-                      ],
-                    );
-                  },
+                final idx = _isAiChat ? i - 1 : i;
+                final msg = messages[idx];
+                final isMe = msg.senderId == auth.uid;
+                final isAi = msg.senderId == 'ai';
+                // Pass the preceding user message as the query for better matching
+                final userQuery = (isAi && idx > 0 && messages[idx - 1].senderId != 'ai')
+                    ? messages[idx - 1].text
+                    : '';
+                final related = (isAi && _isAiChat)
+                    ? _findRelatedPosts(msg.text, userQuery, allPosts)
+                    : <PostModel>[];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _MessageBubble(
+                      message: msg,
+                      isMe: isMe,
+                      isAi: isAi,
+                      myUid: auth.uid,
+                    ),
+                    if (related.isNotEmpty)
+                      _RelatedPostsRow(posts: related),
+                  ],
                 );
               },
-            ),
-          ),
-          // F36 — AI quick-reply suggestion chips
-          if (_isAiChat) _buildSuggestionChips(),
-          _buildInputBar(),
-        ],
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(child: listWidget),
+              if (_isAiChat && !limitReached) _buildSuggestionChips(),
+              _buildInputBar(limitReached, todayAiMsgs),
+            ],
+          );
+        },
       ),
     );
   }
@@ -272,13 +382,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
   ];
 
   Widget _buildSuggestionChips() {
-    return SizedBox(
-      height: 36,
+    return Container(
+      height: 46,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         itemCount: _quickReplies.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) => GestureDetector(
           onTap: () {
             _msgCtrl.text = _quickReplies[i];
@@ -286,12 +397,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 TextPosition(offset: _msgCtrl.text.length));
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: const Color(0xFFF3E8FF),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+                  color: const Color(0xFF8B5CF6).withOpacity(0.35)),
             ),
             child: Text(
               _quickReplies[i],
@@ -306,60 +418,130 @@ class _ConversationScreenState extends State<ConversationScreen> {
     );
   }
 
-  Widget _buildInputBar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
+  Widget _buildInputBar(bool limitReached, int todayAiMsgs) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          boxShadow: const [
+            BoxShadow(
+                color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _msgCtrl,
-                maxLines: null,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: _isAiChat
-                      ? 'Ask the AI assistant...'
-                      : 'Type a message...',
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
-                ),
-                onSubmitted: (_) => _sendMessage(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            _sending
-                ? const SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: kOrange, strokeWidth: 2),
+            if (_isAiChat && !limitReached) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: todayAiMsgs / _dailyLimit,
+                        minHeight: 3,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          todayAiMsgs >= 16 ? kOrange : const Color(0xFF8B5CF6),
+                        ),
                       ),
                     ),
-                  )
-                : GestureDetector(
-                    onTap: _sendMessage,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                          color: kOrange, shape: BoxShape.circle),
-                      child: const Icon(Icons.send_rounded,
-                          color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${(_dailyLimit - todayAiMsgs).clamp(0, _dailyLimit)}/$_dailyLimit',
+                    style: TextStyle(
+                      color: todayAiMsgs >= 16 ? kOrange : kMutedFg,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (limitReached)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: kDestructive.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: kDestructive.withOpacity(0.25)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_outline, color: kDestructive, size: 22),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Daily limit reached (20/20)',
+                      style: TextStyle(
+                          color: kDestructive,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Resets tomorrow · Earn 1000 karma for unlimited',
+                      style: TextStyle(color: kMutedFg, fontSize: 11),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              )
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Container(
+                      constraints: const BoxConstraints(maxHeight: 120),
+                      child: TextField(
+                        controller: _msgCtrl,
+                        maxLines: null,
+                        textInputAction: TextInputAction.newline,
+                        decoration: InputDecoration(
+                          hintText: _isAiChat
+                              ? 'Ask the AI assistant...'
+                              : 'Type a message...',
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _sending
+                      ? const SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  color: kOrange, strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      : GestureDetector(
+                          onTap: _sendMessage,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                                color: kOrange, shape: BoxShape.circle),
+                            child: const Icon(Icons.send_rounded,
+                                color: Colors.white, size: 18),
+                          ),
+                        ),
+                ],
+              ),
           ],
         ),
       ),
@@ -438,7 +620,7 @@ class _PostChip extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: kDark),
+                        color: null),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -462,9 +644,8 @@ class _PostChip extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       decoration: BoxDecoration(
-                        color:
-                            (post.isSuperUser ? kAmber : kOrange)
-                                .withValues(alpha: 0.15),
+                        color: (post.isSuperUser ? kAmber : kOrange)
+                            .withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Center(
@@ -479,15 +660,23 @@ class _PostChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 GestureDetector(
-                  onTap: () => context.go('/map'),
+                  onTap: () async {
+                    final query = Uri.encodeComponent('${post.title}, ${post.location}');
+                    final url = Uri.parse(
+                        'https://www.google.com/maps/dir/?api=1'
+                        '&destination=$query'
+                        '&travelmode=driving');
+                    try {
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                  },
                   child: Container(
                     padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
                       color: kOrange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Icon(Icons.map_outlined,
-                        size: 14, color: kOrange),
+                    child: const Icon(Icons.directions, size: 14, color: kOrange),
                   ),
                 ),
               ],
@@ -530,7 +719,7 @@ class _AiAppBarTitle extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.bold)),
-            Text('Powered by Gemini',
+            Text('Powered by AI',
                 style: TextStyle(color: Colors.white70, fontSize: 11)),
           ],
         ),

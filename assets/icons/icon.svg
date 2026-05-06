@@ -1,0 +1,18 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#EC4899;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Map Pin with Gem -->
+  <path d="M20 5C14.4772 5 10 9.47715 10 15C10 22 20 32 20 32C20 32 30 22 30 15C30 9.47715 25.5228 5 20 5Z"
+        fill="url(#iconGradient)"/>
+
+  <!-- Diamond/Gem -->
+  <path d="M20 11L16 16H24L20 11Z" fill="white" opacity="0.9"/>
+  <path d="M16 16L20 22L24 16H16Z" fill="white" opacity="0.7"/>
+  <path d="M13 16L16 16L20 22L13 16Z" fill="white" opacity="0.5"/>
+  <path d="M24 16L27 16L20 22L24 16Z" fill="white" opacity="0.5"/>
+</svg>

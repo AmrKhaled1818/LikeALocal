@@ -50,9 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final cats = (prefs['favCategories'] as List?)?.cast<String>() ?? [];
 
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kDark,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => context.pop(),
@@ -96,11 +94,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: kMuted, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.message_outlined, color: kDark, size: 20),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.message_outlined, size: 20),
             ),
             title: const Text('Allow Direct Messages',
-                style: TextStyle(fontSize: 14, color: kDark)),
+                style: TextStyle(fontSize: 14)),
             subtitle: const Text('Let others send you DMs',
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: chatEnabled,
@@ -115,17 +114,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                    color: kMuted, borderRadius: BorderRadius.circular(8)),
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8)),
                 child: Icon(
                   _scheduleEnabled
                       ? Icons.do_not_disturb_on_outlined
                       : Icons.schedule_outlined,
-                  color: _scheduleEnabled ? kOrange : kDark,
+                  color: _scheduleEnabled ? kOrange : null,
                   size: 20,
                 ),
               ),
               title: const Text('Chat Availability Schedule',
-                  style: TextStyle(fontSize: 14, color: kDark)),
+                  style: TextStyle(fontSize: 14)),
               subtitle: Text(
                 _scheduleEnabled
                     ? 'Active ${_scheduleStart.format(context)} – ${_scheduleEnd.format(context)}'
@@ -145,9 +145,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: kMuted),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Row(
                     children: [
@@ -195,7 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Consumer<ThemeProvider>(
               builder: (context, tp, _) => Container(
                 decoration: BoxDecoration(
-                  color: kMuted,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -231,12 +231,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: kMuted, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.notifications_outlined,
-                  color: kDark, size: 20),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.notifications_outlined, size: 20),
             ),
             title: const Text('Push Notifications',
-                style: TextStyle(fontSize: 14, color: kDark)),
+                style: TextStyle(fontSize: 14)),
             subtitle: const Text('Likes, comments, and mentions',
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: _notificationsEnabled,
@@ -248,12 +248,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: kMuted, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.chat_bubble_outline,
-                  color: kDark, size: 20),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.chat_bubble_outline, size: 20),
             ),
             title: const Text('Message Notifications',
-                style: TextStyle(fontSize: 14, color: kDark)),
+                style: TextStyle(fontSize: 14)),
             value: _dmNotificationsEnabled,
             activeColor: kOrange,
             onChanged: (v) =>
@@ -275,7 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: Colors.white, size: 18),
             ),
             title: const Text('Style Preferences Quiz',
-                style: TextStyle(fontSize: 14, color: kDark)),
+                style: TextStyle(fontSize: 14)),
             subtitle: Text(
               _buildPrefSummary(budget, atmosphere, cats),
               style: const TextStyle(fontSize: 12, color: kMutedFg),
@@ -513,8 +513,8 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
       child: Text(title.toUpperCase(),
-          style: const TextStyle(
-              color: kMutedFg,
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2)),
@@ -537,6 +537,7 @@ class _ThemeModeBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unselectedColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -553,13 +554,13 @@ class _ThemeModeBtn extends StatelessWidget {
             children: [
               Icon(icon,
                   size: 18,
-                  color: selected ? Colors.white : kMutedFg),
+                  color: selected ? Colors.white : unselectedColor),
               const SizedBox(height: 4),
               Text(label,
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: selected ? Colors.white : kMutedFg)),
+                      color: selected ? Colors.white : unselectedColor)),
             ],
           ),
         ),
@@ -588,11 +589,11 @@ class _SettingsTile extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-            color: kMuted, borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, color: kDark, size: 20),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, size: 20),
       ),
-      title:
-          Text(title, style: const TextStyle(fontSize: 14, color: kDark)),
+      title: Text(title, style: const TextStyle(fontSize: 14)),
       subtitle: subtitle != null && subtitle!.isNotEmpty
           ? Text(subtitle!,
               style: const TextStyle(color: kMutedFg, fontSize: 12))

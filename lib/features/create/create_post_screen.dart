@@ -6,13 +6,16 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
+
+// Freemium limits
+const int _kFreePostsPerDay = 3;
+const int _kFreeAiMessagesPerDay = 10;
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -32,10 +35,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   File? _selectedImage;
   String _selectedCategory = 'Restaurant';
   bool _posting = false;
+  bool _checkingLimit = true;
+  int _todayPostCount = 0;
   double? _pickedLat;
   double? _pickedLng;
-
-  static const _draftKey = 'create_post_draft';
 
   static const _categories = [
     'Restaurant',
@@ -49,54 +52,30 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDraft();
-    _titleCtrl.addListener(_saveDraft);
-    _descCtrl.addListener(_saveDraft);
-    _locationCtrl.addListener(_saveDraft);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkDailyLimit());
   }
 
-  Future<void> _loadDraft() async {
-    final prefs = await SharedPreferences.getInstance();
-    final draft = prefs.getString(_draftKey);
-    if (draft == null || !mounted) return;
-    final parts = draft.split('\x00');
-    if (parts.length >= 3) {
-      setState(() {
-        _titleCtrl.text = parts[0];
-        _descCtrl.text = parts[1];
-        _locationCtrl.text = parts[2];
-      });
+  Future<void> _checkDailyLimit() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.uid.isEmpty) return;
+    // Count posts made today by this user
+    final today = DateTime.now();
+    final startOfDay = Timestamp.fromDate(
+        DateTime(today.year, today.month, today.day));
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('posts')
+          .where('userId', isEqualTo: auth.uid)
+          .where('createdAt', isGreaterThanOrEqualTo: startOfDay)
+          .get();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Draft restored'),
-            action: SnackBarAction(
-              label: 'Discard',
-              onPressed: _clearDraft,
-            ),
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        setState(() {
+          _todayPostCount = snap.docs.length;
+          _checkingLimit = false;
+        });
       }
-    }
-  }
-
-  Future<void> _saveDraft() async {
-    final prefs = await SharedPreferences.getInstance();
-    final draft =
-        '${_titleCtrl.text}\x00${_descCtrl.text}\x00${_locationCtrl.text}';
-    await prefs.setString(_draftKey, draft);
-  }
-
-  Future<void> _clearDraft() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_draftKey);
-    if (mounted) {
-      setState(() {
-        _titleCtrl.clear();
-        _descCtrl.clear();
-        _locationCtrl.clear();
-      });
+    } catch (_) {
+      if (mounted) setState(() => _checkingLimit = false);
     }
   }
 
@@ -112,21 +91,33 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final isSuperUser = auth.userModel?.isSuperUser ?? false;
+    final limitReached =
+        !isSuperUser && _todayPostCount >= _kFreePostsPerDay;
+    final canPost = !_posting && !_checkingLimit && !limitReached;
+
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kDark,
+        leadingWidth: 90,
         leading: TextButton(
-          onPressed: () => context.pop(),
-          child: const Text('Cancel',
-              style: TextStyle(color: Colors.white, fontSize: 14)),
+          onPressed: _cancelPost,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: Colors.white, fontSize: 14),
+            softWrap: false,
+            overflow: TextOverflow.clip,
+          ),
         ),
         title: const Text('New Post',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: _posting
+            child: _posting || _checkingLimit
                 ? const Center(
                     child: SizedBox(
                         width: 20,
@@ -135,9 +126,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                             color: Colors.white, strokeWidth: 2)),
                   )
                 : ElevatedButton(
-                    onPressed: _submitPost,
+                    onPressed: canPost ? _submitPost : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kOrange,
+                      backgroundColor: canPost ? kOrange : kMutedFg,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(
@@ -158,7 +149,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image picker
+              // Freemium limit banner
+              if (!isSuperUser) _buildFreemiumBanner(limitReached),
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -248,7 +240,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   final result = await Navigator.push<LatLng>(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => _LocationPickerScreen(
+                      builder: (_) => LocationPickerScreen(
                         initial: (_pickedLat != null && _pickedLng != null)
                             ? LatLng(_pickedLat!, _pickedLng!)
                             : null,
@@ -418,13 +410,76 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
+  void _cancelPost() {
+    _titleCtrl.clear();
+    _descCtrl.clear();
+    _locationCtrl.clear();
+    _tipsCtrl.clear();
+    _dishesCtrl.clear();
+    setState(() {
+      _selectedImage = null;
+      _pickedLat = null;
+      _pickedLng = null;
+      _selectedCategory = 'Restaurant';
+    });
+    context.go('/feed');
+  }
+
   Widget _label(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
         style: const TextStyle(
-            fontWeight: FontWeight.w600, fontSize: 14, color: kDark),
+            fontWeight: FontWeight.w600, fontSize: 14),
+      ),
+    );
+  }
+
+  Widget _buildFreemiumBanner(bool limitReached) {
+    final remaining = (_kFreePostsPerDay - _todayPostCount).clamp(0, _kFreePostsPerDay);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: limitReached
+              ? [kDestructive.withOpacity(0.08), kDestructive.withOpacity(0.15)]
+              : [kAmber.withOpacity(0.08), kOrange.withOpacity(0.08)],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: limitReached ? kDestructive.withOpacity(0.4) : kAmber.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            limitReached ? Icons.lock_outline : Icons.stars_outlined,
+            color: limitReached ? kDestructive : kAmber,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: limitReached
+                ? const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Daily post limit reached (3/3)',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: kDestructive)),
+                      Text('Earn 1000 karma to unlock unlimited posting',
+                          style: TextStyle(color: kMutedFg, fontSize: 12)),
+                    ],
+                  )
+                : Text(
+                    '$remaining of $_kFreePostsPerDay free posts remaining today',
+                    style: const TextStyle(color: kMutedFg, fontSize: 12),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -504,14 +559,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         createdAt: Timestamp.now(),
       );
 
+      // 45-second timeout so we never hang forever (Cloudinary + Firestore)
       final id = await context
           .read<PostsProvider>()
-          .createPost(post, _selectedImage);
+          .createPost(post, _selectedImage)
+          .timeout(
+        const Duration(seconds: 45),
+        onTimeout: () {
+          throw Exception(
+              'Upload timed out. Check your connection and try again.');
+        },
+      );
+
       if (id != null && mounted) {
-        await _clearDraft();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Post shared!'),
+              content: Text('Post shared! Karma +10 🎉'),
               backgroundColor: Colors.green),
         );
         context.go('/feed');
@@ -526,8 +589,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: kDestructive),
+              content: Text('Error: ${e.toString().replaceFirst("Exception: ", "")}'),
+              backgroundColor: kDestructive,
+              duration: const Duration(seconds: 5)),
         );
       }
     } finally {
@@ -538,15 +602,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
 // ── Full-screen map location picker ──────────────────────────────────────────
 
-class _LocationPickerScreen extends StatefulWidget {
+class LocationPickerScreen extends StatefulWidget {
   final LatLng? initial;
-  const _LocationPickerScreen({this.initial});
+  const LocationPickerScreen({super.key, this.initial});
 
   @override
-  State<_LocationPickerScreen> createState() => _LocationPickerScreenState();
+  State<LocationPickerScreen> createState() => _LocationPickerScreenState();
 }
 
-class _LocationPickerScreenState extends State<_LocationPickerScreen> {
+class _LocationPickerScreenState extends State<LocationPickerScreen> {
   static const _cairoCenter = LatLng(30.0444, 31.2357);
   LatLng? _picked;
 
@@ -560,7 +624,6 @@ class _LocationPickerScreenState extends State<_LocationPickerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: kDark,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -633,7 +696,7 @@ class _LocationPickerScreenState extends State<_LocationPickerScreen> {
                     _picked == null
                         ? 'Tap anywhere on the map to drop a pin'
                         : 'Tap again to move the pin',
-                    style: const TextStyle(fontSize: 13, color: kDark),
+                    style: const TextStyle(fontSize: 13, color: null),
                   ),
                 ],
               ),
@@ -649,7 +712,7 @@ class _LocationPickerScreenState extends State<_LocationPickerScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: kDark,
+                  color: null,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(

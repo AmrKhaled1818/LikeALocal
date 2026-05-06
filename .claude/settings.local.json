@@ -39,7 +39,22 @@
       "Bash(keytool -list -v -keystore \"%USERPROFILE%\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android)",
       "PowerShell(keytool -list -v -keystore \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android 2>&1 | Select-String \"SHA1|SHA256\")",
       "PowerShell($javaHome = & flutter doctor --verbose 2>&1 | Select-String \"Java\" | Select-Object -First 1; Write-Output $javaHome; Get-ChildItem \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -ErrorAction SilentlyContinue)",
-      "PowerShell(& \"C:\\\\Program Files\\\\Android\\\\Android Studio1\\\\jbr\\\\bin\\\\keytool.exe\" -list -v -keystore \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android 2>&1 | Select-String \"SHA1|SHA256\")"
+      "PowerShell(& \"C:\\\\Program Files\\\\Android\\\\Android Studio1\\\\jbr\\\\bin\\\\keytool.exe\" -list -v -keystore \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android 2>&1 | Select-String \"SHA1|SHA256\")",
+      "Bash(python -c \"from PIL import Image, ImageDraw; print\\('PIL ok'\\)\")",
+      "Bash(pip install *)",
+      "Bash(python -c \"from PIL import Image; print\\('ok'\\)\")",
+      "Bash(C:\\\\Python314\\\\python.exe -m pip install Pillow)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Dell\\\\Desktop\" -Recurse -Depth 3 | Where-Object { $_.Extension -match '\\\\.\\(svg|png|jpg\\)$' } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Dell\" -Recurse -Depth 1 | Where-Object { $_.Extension -match '\\\\.\\(svg|png\\)$' } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Dell\\\\Downloads\" | Where-Object { $_.Extension -match '\\\\.\\(svg|png\\)$' } | Select-Object Name, FullName)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Dell\\\\Documents\" -Recurse -Depth 2 | Where-Object { $_.Name -match 'logo|icon' } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Dell\" -Recurse -Depth 3 | Where-Object { $_.Name -eq 'logo.svg' -or $_.Name -eq 'icon.svg' } | Select-Object FullName)",
+      "Bash(curl -s https://openrouter.ai/api/v1/chat/completions -H 'Authorization: Bearer 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' -H 'Content-Type: application/json' -H 'HTTP-Referer: https://likealocal.app' -H 'X-Title: LikeALocal' -d '{ *)",
+      "Bash(curl -s https://openrouter.ai/api/v1/models -H 'Authorization: Bearer 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')",
+      "Bash(python -c ' *)",
+      "Bash(curl -s https://openrouter.ai/api/v1/chat/completions -H 'Authorization: Bearer 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' -H 'Content-Type: application/json' -H 'HTTP-Referer: https://likealocal.app' -H 'X-Title: LikeALocal' -d '{\"model\":\"openai/gpt-oss-20b:free\",\"messages\":[{\"role\":\"user\",\"content\":\"Recommend a hidden cafe in New Cairo\"}],\"max_tokens\":200,\"temperature\":0.3}')",
+      "Bash(curl -s https://openrouter.ai/api/v1/chat/completions -H 'Authorization: Bearer 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' -H 'Content-Type: application/json' -H 'HTTP-Referer: https://likealocal.app' -H 'X-Title: LikeALocal' -d '{\"model\":\"openai/gpt-oss-20b:free\",\"messages\":[{\"role\":\"system\",\"content\":\"You are AI assistant for LikeALocal app. Be concise.\"},{\"role\":\"user\",\"content\":\"suggest a cafe near New Cairo\"}],\"max_tokens\":150,\"temperature\":0.3}')",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('choices',[{}]\\)[0].get\\('message',{}\\).get\\('content','ERROR: '+str\\(d\\)\\)\\)\")"
     ]
   }
 }

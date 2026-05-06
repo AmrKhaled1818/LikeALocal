@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,22 +68,10 @@ class _SplashScreenState extends State<SplashScreen>
             children: [
               ScaleTransition(
                 scale: _scale,
-                child: Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [kOrange, Color(0xFFFF6B9D)]),
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: kOrange.withOpacity(0.4),
-                        blurRadius: 32,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.layers_rounded,
-                      color: Colors.white, size: 54),
+                child: SvgPicture.asset(
+                  'assets/images/logo.svg',
+                  width: 120,
+                  height: 120,
                 ),
               ),
               const SizedBox(height: 28),

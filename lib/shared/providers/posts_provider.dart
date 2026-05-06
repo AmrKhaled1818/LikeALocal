@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/models/post_model.dart';
+import '../../data/models/comment_model.dart';
 import '../../data/repositories/posts_repo.dart';
 import '../../data/seed_places.dart';
 
@@ -78,11 +79,10 @@ class PostsProvider extends ChangeNotifier {
 
   Future<String?> createPost(PostModel post, File? imageFile) async {
     try {
-      final id = await _repo.createPost(post, imageFile);
-      final newPost = post.copyWith(postId: id);
+      final newPost = await _repo.createPost(post, imageFile);
       _feedPosts = [newPost, ..._feedPosts];
       notifyListeners();
-      return id;
+      return newPost.postId;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -90,10 +90,40 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> upvotePost(
-      String postId, String voterId, String authorId) async {
+  Future<bool> updatePost(PostModel updatedPost, File? newImageFile) async {
     try {
-      await _repo.upvotePost(postId, voterId, authorId);
+      final result = await _repo.updatePost(updatedPost, newImageFile);
+      final index = _feedPosts.indexWhere((p) => p.postId == updatedPost.postId);
+      if (index != -1) {
+        _feedPosts[index] = result;
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> upvotePost(
+      String postId, String voterId, String authorId, String voterName) async {
+    try {
+      await _repo.upvotePost(postId, voterId, authorId, voterName);
+      
+      // Update local state upvotedBy list for immediate UI feedback
+      final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
+      if (postIndex != -1) {
+        final post = _feedPosts[postIndex];
+        if (!post.upvotedBy.contains(voterName)) {
+          final updatedUpvoters = List<String>.from(post.upvotedBy)..add(voterName);
+          _feedPosts[postIndex] = post.copyWith(
+            upvotes: post.upvotes + 1,
+            upvotedBy: updatedUpvoters,
+          );
+          notifyListeners();
+        }
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -106,6 +136,22 @@ class PostsProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+    }
+  }
+
+  Future<void> addComment(CommentModel comment) async {
+    try {
+      await _repo.addComment(comment);
+      final index = _feedPosts.indexWhere((p) => p.postId == comment.postId);
+      if (index != -1) {
+        final post = _feedPosts[index];
+        _feedPosts[index] = post.copyWith(commentCount: post.commentCount + 1);
+        notifyListeners();
+      }
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
     }
   }
 

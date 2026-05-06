@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
@@ -113,16 +114,10 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 32),
                 // Logo
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [kOrange, Color(0xFFFF6B9D)],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(Icons.layers_rounded,
-                      color: Colors.white, size: 40),
+                SvgPicture.asset(
+                  'assets/images/logo.svg',
+                  width: 80,
+                  height: 80,
                 ),
                 const SizedBox(height: 20),
                 const Text(

@@ -18,7 +18,6 @@ class SidebarMenu extends StatelessWidget {
         final remaining = (1000 - karma).clamp(0, 1000);
 
         return Drawer(
-          backgroundColor: kBackground,
           child: SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -26,7 +25,6 @@ class SidebarMenu extends StatelessWidget {
                 // Header
                 Container(
                   padding: const EdgeInsets.all(20),
-                  color: kBackground,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -52,7 +50,6 @@ class SidebarMenu extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: kDark,
                         ),
                       ),
                       Row(
@@ -162,10 +159,9 @@ class SidebarMenu extends StatelessWidget {
       required String label,
       required String route}) {
     return ListTile(
-      leading: Icon(icon, color: kDark, size: 22),
+      leading: Icon(icon, size: 22),
       title: Text(label,
-          style: const TextStyle(
-              color: kDark, fontSize: 15, fontWeight: FontWeight.w500)),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
       onTap: () {
         Navigator.of(context).pop();
         context.push(route);

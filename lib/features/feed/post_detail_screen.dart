@@ -10,8 +10,10 @@ import '../../data/models/comment_model.dart';
 import '../../data/models/post_model.dart';
 import '../../data/repositories/posts_repo.dart';
 import '../../data/repositories/chat_repo.dart';
+import '../../features/edit/edit_post_screen.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/user_provider.dart';
+import '../../shared/providers/posts_provider.dart';
 import '../../shared/widgets/error_retry.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/super_user_badge.dart';
@@ -29,24 +31,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final PostsRepo _repo = PostsRepo();
   final _commentCtrl = TextEditingController();
   bool _submitting = false;
-  PostModel? _post;
-  bool _loadError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPost();
-  }
-
-  Future<void> _loadPost() async {
-    setState(() => _loadError = false);
-    try {
-      final post = await _repo.getPost(widget.postId);
-      if (mounted) setState(() => _post = post);
-    } catch (_) {
-      if (mounted) setState(() => _loadError = true);
-    }
-  }
 
   @override
   void dispose() {
@@ -56,26 +40,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadError) {
-      return Scaffold(
-        appBar: AppBar(backgroundColor: kDark),
-        body: ErrorRetryWidget(
-          message: 'Could not load post. Check your connection.',
-          onRetry: _loadPost,
-        ),
-      );
-    }
-    if (_post == null) {
-      return Scaffold(
-        appBar: AppBar(backgroundColor: kDark),
-        body: const Center(
-            child: CircularProgressIndicator(color: kOrange)),
-      );
-    }
+    final auth = context.watch<AuthProvider>();
 
-    final post = _post!;
+    return StreamBuilder<PostModel?>(
+      stream: _repo.watchPost(widget.postId),
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return Scaffold(
+            appBar: AppBar(),
+            body: ErrorRetryWidget(
+              message: 'Could not load post. Check your connection.',
+              onRetry: () => setState(() {}),
+            ),
+          );
+        }
+        if (!snap.hasData) {
+          return Scaffold(
+            appBar: AppBar(),
+            body: const Center(child: CircularProgressIndicator(color: kOrange)),
+          );
+        }
+
+        final post = snap.data!;
+        final isOwner = post.userId == auth.uid;
+        return _buildScaffold(context, post, isOwner);
+      },
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner) {
     return Scaffold(
-      backgroundColor: kBackground,
       body: Column(
         children: [
           Expanded(
@@ -85,12 +79,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 SliverAppBar(
                   expandedHeight: 260,
                   pinned: true,
-                  backgroundColor: kDark,
                   leading: IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                     onPressed: () => context.pop(),
                   ),
                   actions: [
+                    if (isOwner)
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                        tooltip: 'Edit post',
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditPostScreen(post: post),
+                            ),
+                          );
+                        },
+                      ),
                     IconButton(
                       icon: const Icon(Icons.share_outlined,
                           color: Colors.white),
@@ -189,7 +195,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: kDark)),
+                                color: null)),
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -205,7 +211,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         const SizedBox(height: 12),
                         Text(post.description,
                             style: const TextStyle(
-                                color: kDark, fontSize: 14, height: 1.5)),
+                                color: null, fontSize: 14, height: 1.5)),
                         if (post.localTips.isNotEmpty) ...[
                           const SizedBox(height: 16),
                           Container(
@@ -234,7 +240,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                       const SizedBox(height: 4),
                                       Text(post.localTips,
                                           style: const TextStyle(
-                                              fontSize: 13, color: kDark)),
+                                              fontSize: 13, color: null)),
                                     ],
                                   ),
                                 ),
@@ -326,7 +332,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         const Divider(),
                         const Text('Comments',
                             style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16, color: kDark)),
+                                fontWeight: FontWeight.bold, fontSize: 16, color: null)),
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -441,7 +447,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         isSuperUser: auth.userModel?.isSuperUser ?? false,
         content: text,
       );
-      await _repo.addComment(comment);
+      await context.read<PostsProvider>().addComment(comment);
       _commentCtrl.clear();
     } catch (e) {
       if (mounted) {
@@ -553,7 +559,7 @@ class _CommentItemState extends State<_CommentItem> {
                   children: [
                     Text(c.username,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13, color: kDark)),
+                            fontWeight: FontWeight.w600, fontSize: 13, color: null)),
                     if (c.isSuperUser) ...[
                       const SizedBox(width: 4),
                       const SuperUserBadge(),
@@ -603,7 +609,7 @@ class _CommentItemState extends State<_CommentItem> {
                   )
                 else
                   Text(c.content,
-                      style: const TextStyle(fontSize: 13, height: 1.4, color: kDark)),
+                      style: const TextStyle(fontSize: 13, height: 1.4, color: null)),
               ],
             ),
           ),

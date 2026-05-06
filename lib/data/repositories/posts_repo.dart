@@ -26,11 +26,7 @@ class PostsRepo {
     final snap = await query.get();
     final posts =
         snap.docs.map((d) => PostModel.fromMap(d.data(), d.id)).toList();
-    // Sort super user posts to top client-side
-    posts.sort((a, b) {
-      if (a.isSuperUser != b.isSuperUser) return a.isSuperUser ? -1 : 1;
-      return b.createdAt.compareTo(a.createdAt);
-    });
+    posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final lastDoc = snap.docs.isNotEmpty ? snap.docs.last : null;
     return (posts, lastDoc);
   }
@@ -44,10 +40,7 @@ class PostsRepo {
         .map((snap) {
       final posts =
           snap.docs.map((d) => PostModel.fromMap(d.data(), d.id)).toList();
-      posts.sort((a, b) {
-        if (a.isSuperUser != b.isSuperUser) return a.isSuperUser ? -1 : 1;
-        return b.createdAt.compareTo(a.createdAt);
-      });
+      posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return posts;
     });
   }
@@ -56,6 +49,60 @@ class PostsRepo {
     final doc = await _db.collection('posts').doc(postId).get();
     if (!doc.exists) return null;
     return PostModel.fromMap(doc.data()!, doc.id);
+  }
+
+  Stream<PostModel?> watchPost(String postId) {
+    return _db.collection('posts').doc(postId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return PostModel.fromMap(doc.data()!, doc.id);
+    });
+  }
+
+  Future<PostModel> updatePost(PostModel post, File? newImageFile) async {
+    String imageUrl = post.imageUrl;
+    String imagePublicId = post.imagePublicId;
+
+    if (newImageFile != null) {
+      final result = await _cloudinary.uploadImage(newImageFile);
+      imageUrl = result.imageUrl;
+      imagePublicId = result.imagePublicId;
+    }
+
+    await _db.collection('posts').doc(post.postId).update({
+      'title': post.title,
+      'description': post.description,
+      'location': post.location,
+      'lat': post.lat,
+      'lng': post.lng,
+      'category': post.category,
+      'localTips': post.localTips,
+      'recommendedDishes': post.recommendedDishes,
+      'imageUrl': imageUrl,
+      'imagePublicId': imagePublicId,
+    });
+
+    return PostModel(
+      postId: post.postId,
+      userId: post.userId,
+      username: post.username,
+      userAvatarUrl: post.userAvatarUrl,
+      isSuperUser: post.isSuperUser,
+      title: post.title,
+      description: post.description,
+      location: post.location,
+      lat: post.lat,
+      lng: post.lng,
+      category: post.category,
+      localTips: post.localTips,
+      recommendedDishes: post.recommendedDishes,
+      imageUrl: imageUrl,
+      imagePublicId: imagePublicId,
+      upvotes: post.upvotes,
+      downvotes: post.downvotes,
+      upvotedBy: post.upvotedBy,
+      commentCount: post.commentCount,
+      createdAt: post.createdAt,
+    );
   }
 
   Future<List<PostModel>> getUserPosts(String userId) async {
@@ -70,7 +117,7 @@ class PostsRepo {
     return posts;
   }
 
-  Future<String> createPost(PostModel post, File? imageFile) async {
+  Future<PostModel> createPost(PostModel post, File? imageFile) async {
     final ref = _db.collection('posts').doc();
     String imageUrl = post.imageUrl;
     String imagePublicId = post.imagePublicId;
@@ -81,26 +128,29 @@ class PostsRepo {
       imagePublicId = result.imagePublicId;
     }
 
-    final data =
-        post.copyWith(imageUrl: imageUrl, imagePublicId: imagePublicId).toMap();
-    data['postId'] = ref.id;
+    final newPost = post.copyWith(
+        postId: ref.id, imageUrl: imageUrl, imagePublicId: imagePublicId);
+    final data = newPost.toMap();
     await ref.set(data);
     await _userRepo.addKarma(post.userId, 10);
-    return ref.id;
+    return newPost;
   }
 
-  Future<void> upvotePost(String postId, String voterId, String authorId) async {
+  Future<void> upvotePost(String postId, String voterId, String authorId, String voterName) async {
     await _db
         .collection('posts')
         .doc(postId)
-        .update({'upvotes': FieldValue.increment(1)});
+        .update({
+      'upvotes': FieldValue.increment(1),
+      'upvotedBy': FieldValue.arrayUnion([voterName]),
+    });
     await _userRepo.addKarma(authorId, 2);
     await _createNotification(NotificationModel(
       notifId: '',
       userId: authorId,
       type: 'upvote',
-      title: 'Someone upvoted your post',
-      body: 'Your post received an upvote!',
+      title: '$voterName upvoted your post',
+      body: '$voterName just upvoted your post!',
       postId: postId,
     ));
   }

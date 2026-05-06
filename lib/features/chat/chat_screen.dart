@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/user_model.dart';
+import '../../data/repositories/user_repo.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/chat_provider.dart';
 import '../../data/models/message_model.dart';
@@ -41,7 +43,6 @@ class _ChatScreenState extends State<ChatScreen> {
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: kBackground,
           body: SafeArea(
             child: Column(
               children: [
@@ -69,11 +70,11 @@ class _ChatScreenState extends State<ChatScreen> {
           const Text(
             'Messages',
             style: TextStyle(
-                fontSize: 22, fontWeight: FontWeight.bold, color: kDark),
+                fontSize: 22, fontWeight: FontWeight.bold, color: null),
           ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.people_outline, color: kDark),
+            icon: const Icon(Icons.people_outline, color: null),
             onPressed: () => setState(() => _sidebarOpen = true),
           ),
         ],
@@ -202,7 +203,7 @@ class _AiChatTile extends StatelessWidget {
   }
 }
 
-class _ChatTile extends StatelessWidget {
+class _ChatTile extends StatefulWidget {
   final ChatModel chat;
   final String currentUid;
 
@@ -212,27 +213,53 @@ class _ChatTile extends StatelessWidget {
       chat.participants.firstWhere((p) => p != currentUid, orElse: () => '');
 
   @override
+  State<_ChatTile> createState() => _ChatTileState();
+}
+
+class _ChatTileState extends State<_ChatTile> {
+  UserModel? _otherUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final uid = widget._otherUid;
+    if (uid.isEmpty) return;
+    final user = await UserRepo().getUser(uid);
+    if (mounted) setState(() => _otherUser = user);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final unread = chat.unreadCount[currentUid] ?? 0;
-    final timeStr = _formatTime(chat.lastMessageAt.toDate());
+    final unread = widget.chat.unreadCount[widget.currentUid] ?? 0;
+    final timeStr = _formatTime(widget.chat.lastMessageAt.toDate());
+    final displayName = _otherUser?.username ?? widget._otherUid;
+    final avatarUrl = _otherUser?.avatarUrl ?? '';
 
     return ListTile(
-      onTap: () => context.push('/conversation/${chat.chatId}'),
+      onTap: () => context.push('/conversation/${widget.chat.chatId}'),
       leading: CircleAvatar(
         backgroundColor: kOrange,
-        child: Text(
-          _otherUid.isNotEmpty ? _otherUid[0].toUpperCase() : '?',
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-        ),
+        backgroundImage:
+            avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+        child: avatarUrl.isEmpty
+            ? Text(
+                displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              )
+            : null,
       ),
       title: Text(
-        _otherUid,
+        displayName,
         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        chat.lastMessage.isEmpty ? 'No messages yet' : chat.lastMessage,
+        widget.chat.lastMessage.isEmpty ? 'No messages yet' : widget.chat.lastMessage,
         style: const TextStyle(color: kMutedFg, fontSize: 12),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

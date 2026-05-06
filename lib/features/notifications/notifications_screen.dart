@@ -20,9 +20,7 @@ class NotificationsScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kDark,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => context.pop(),
@@ -70,7 +68,7 @@ class NotificationsScreen extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: kDark)),
+                          color: null)),
                   const SizedBox(height: 4),
                   const Text('You\'ll see likes, comments, and more here',
                       style: TextStyle(color: kMutedFg)),
@@ -180,7 +178,7 @@ class _NotificationTile extends StatelessWidget {
         style: TextStyle(
           fontWeight: notif.read ? FontWeight.normal : FontWeight.w600,
           fontSize: 14,
-          color: kDark,
+          color: null,
         ),
       ),
       subtitle: Column(

@@ -27,7 +27,7 @@ class ErrorRetryWidget extends StatelessWidget {
               style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: kDark),
+                  color: null),
             ),
             const SizedBox(height: 6),
             Text(

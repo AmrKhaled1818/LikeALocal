@@ -9,6 +9,8 @@ import '../../core/theme/app_colors.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
+import '../../data/repositories/posts_repo.dart';
+import '../../data/models/comment_model.dart';
 import 'super_user_badge.dart';
 
 // F17 — Category color map
@@ -46,6 +48,9 @@ class _PostCardState extends State<PostCard>
   late final Animation<Offset> _heartSlide;
   bool _showHeart = false;
 
+  final _commentCtrl = TextEditingController();
+  bool _submittingComment = false;
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +76,7 @@ class _PostCardState extends State<PostCard>
   @override
   void dispose() {
     _heartCtrl.dispose();
+    _commentCtrl.dispose();
     super.dispose();
   }
 
@@ -98,6 +104,8 @@ class _PostCardState extends State<PostCard>
     final createdAt = post.createdAt.toDate();
     final catColor = _catColor(post.category);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () => context.push('/post/${post.postId}'),
       onDoubleTap: _onDoubleTap,
@@ -107,9 +115,13 @@ class _PostCardState extends State<PostCard>
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
             decoration: BoxDecoration(
-              color: post.isSuperUser ? kSuperUserBg : kBackground,
+              color: post.isSuperUser
+                  ? (isDark ? kAmber.withOpacity(0.15) : kSuperUserBg)
+                  : Theme.of(context).colorScheme.surface,
               border: Border.all(
-                color: post.isSuperUser ? kAmber : kMuted,
+                color: post.isSuperUser
+                    ? kAmber.withOpacity(0.5)
+                    : Theme.of(context).colorScheme.outlineVariant,
                 width: post.isSuperUser ? 1.5 : 1,
               ),
               borderRadius: BorderRadius.circular(12),
@@ -145,10 +157,10 @@ class _PostCardState extends State<PostCard>
                               children: [
                                 Text(
                                   post.username,
-                                  style: const TextStyle(
+                                  style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurface,
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                      color: kDark),
+                                      fontSize: 13),
                                 ),
                                 if (post.isSuperUser) ...[
                                   const SizedBox(width: 6),
@@ -202,10 +214,10 @@ class _PostCardState extends State<PostCard>
                     children: [
                       Text(
                         post.title,
-                        style: const TextStyle(
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
                             fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: kDark),
+                            fontSize: 15),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -230,11 +242,11 @@ class _PostCardState extends State<PostCard>
                       fit: BoxFit.cover,
                       placeholder: (_, __) => Container(
                         height: 200,
-                        color: kMuted,
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       ),
                       errorWidget: (_, __, ___) => Container(
                         height: 200,
-                        color: kMuted,
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         child: const Icon(Icons.image_outlined,
                             color: kMutedFg),
                       ),
@@ -249,7 +261,7 @@ class _PostCardState extends State<PostCard>
                       // Vote controls
                       Container(
                         decoration: BoxDecoration(
-                          color: kMuted,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -280,7 +292,7 @@ class _PostCardState extends State<PostCard>
                                     ? kOrange
                                     : _userVote == -1
                                         ? Colors.blue
-                                        : kDark,
+                                        : null,
                               ),
                             ),
                             IconButton(
@@ -343,6 +355,124 @@ class _PostCardState extends State<PostCard>
                     ],
                   ),
                 ),
+
+                // Upvoted by names
+                if (post.upvotedBy.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'Upvoted by ${post.upvotedBy.join(', ')}',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 12, fontWeight: FontWeight.w600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (post.upvotedBy.isNotEmpty) const SizedBox(height: 4),
+
+                // View all comments link
+                if (post.commentCount > 2)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: GestureDetector(
+                      onTap: () => context.push('/post/${post.postId}'),
+                      child: Text(
+                        'View all ${post.commentCount} comments',
+                        style: const TextStyle(color: kMutedFg, fontSize: 13),
+                      ),
+                    ),
+                  ),
+
+                // Inline comments Stream
+                if (post.commentCount > 0)
+                  StreamBuilder<List<CommentModel>>(
+                    stream: PostsRepo().getComments(post.postId),
+                    builder: (context, snap) {
+                      if (!snap.hasData || snap.data!.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      final comments = snap.data!;
+                      final recent = comments.length > 2
+                          ? comments.sublist(comments.length - 2)
+                          : comments;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        child: Column(
+                          children: recent.map((c) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  c.username,
+                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    c.content,
+                                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  timeago.format(c.createdAt.toDate()),
+                                  style: const TextStyle(color: kMutedFg, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          )).toList(),
+                        ),
+                      );
+                    },
+                  ),
+
+                // Add a comment input
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Consumer<AuthProvider>(
+                        builder: (context, auth, _) {
+                          final avatar = auth.userModel?.avatarUrl ?? '';
+                          final name = auth.userModel?.username ?? 'U';
+                          return CircleAvatar(
+                            radius: 12,
+                            backgroundColor: kOrange,
+                            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                            child: avatar.isEmpty
+                                ? Text(name.substring(0, 1).toUpperCase(),
+                                    style: const TextStyle(color: Colors.white, fontSize: 10))
+                                : null,
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _commentCtrl,
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: 'Add a comment...',
+                            hintStyle: TextStyle(color: kMutedFg, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onSubmitted: (val) => _submitComment(val),
+                        ),
+                      ),
+                      if (_submittingComment)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: kOrange),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
               ],
             ),
           ),
@@ -385,7 +515,7 @@ class _PostCardState extends State<PostCard>
       HapticFeedback.mediumImpact();
       if (vote == 1) {
         posts.upvotePost(
-            widget.post.postId, auth.uid, widget.post.userId);
+            widget.post.postId, auth.uid, widget.post.userId, auth.userModel?.username ?? 'User');
       } else {
         posts.downvotePost(widget.post.postId);
       }
@@ -410,6 +540,32 @@ class _PostCardState extends State<PostCard>
       );
     } else {
       posts.unsavePost(auth.uid, widget.post.postId);
+    }
+  }
+
+  Future<void> _submitComment(String text) async {
+    if (text.trim().isEmpty) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.uid.isEmpty) return;
+
+    setState(() => _submittingComment = true);
+    try {
+      final comment = CommentModel(
+        commentId: '',
+        postId: widget.post.postId,
+        userId: auth.uid,
+        username: auth.userModel?.username ?? 'User',
+        userAvatarUrl: auth.userModel?.avatarUrl ?? '',
+        isSuperUser: auth.userModel?.isSuperUser ?? false,
+        content: text.trim(),
+      );
+      await context.read<PostsProvider>().addComment(comment);
+      _commentCtrl.clear();
+      FocusScope.of(context).unfocus();
+    } catch (_) {
+      // ignore
+    } finally {
+      if (mounted) setState(() => _submittingComment = false);
     }
   }
 }

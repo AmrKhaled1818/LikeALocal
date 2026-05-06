@@ -18,6 +18,7 @@ class PostModel {
   final String category;
   final int upvotes;
   final int downvotes;
+  final List<String> upvotedBy;
   final int commentCount;
   final Timestamp createdAt;
 
@@ -39,6 +40,7 @@ class PostModel {
     this.category = 'Restaurant',
     this.upvotes = 0,
     this.downvotes = 0,
+    this.upvotedBy = const [],
     this.commentCount = 0,
     Timestamp? createdAt,
   }) : createdAt = createdAt ?? Timestamp.now();
@@ -63,6 +65,7 @@ class PostModel {
       category: map['category'] ?? 'Restaurant',
       upvotes: map['upvotes'] ?? 0,
       downvotes: map['downvotes'] ?? 0,
+      upvotedBy: List<String>.from(map['upvotedBy'] ?? []),
       commentCount: map['commentCount'] ?? 0,
       createdAt: map['createdAt'] ?? Timestamp.now(),
     );
@@ -87,6 +90,7 @@ class PostModel {
       'category': category,
       'upvotes': upvotes,
       'downvotes': downvotes,
+      'upvotedBy': upvotedBy,
       'commentCount': commentCount,
       'createdAt': createdAt,
     };
@@ -96,6 +100,7 @@ class PostModel {
     String? postId,
     int? upvotes,
     int? downvotes,
+    List<String>? upvotedBy,
     int? commentCount,
     String? imageUrl,
     String? imagePublicId,
@@ -118,6 +123,7 @@ class PostModel {
       category: category,
       upvotes: upvotes ?? this.upvotes,
       downvotes: downvotes ?? this.downvotes,
+      upvotedBy: upvotedBy ?? this.upvotedBy,
       commentCount: commentCount ?? this.commentCount,
       createdAt: createdAt,
     );

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/providers/auth_provider.dart';
+import '../../shared/providers/chat_provider.dart';
 
 class AppBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -9,16 +12,29 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Calculate total unread messages
+    final auth = context.watch<AuthProvider>();
+    final chats = context.watch<ChatProvider>().chats;
+    int unreadTotal = 0;
+    if (auth.uid.isNotEmpty) {
+      for (final chat in chats) {
+        unreadTotal += chat.unreadCount[auth.uid] ?? 0;
+      }
+    }
+
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: kMuted)),
+      decoration: BoxDecoration(
+        border: Border(
+            top: BorderSide(
+                color: isDark ? const Color(0xFF374151) : kMuted)),
       ),
       child: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: (i) => _onTap(context, i),
         selectedItemColor: kOrange,
         unselectedItemColor: kMutedFg,
-        backgroundColor: kBackground,
         type: BottomNavigationBarType.fixed,
         selectedFontSize: 11,
         unselectedFontSize: 11,
@@ -44,9 +60,17 @@ class AppBottomNav extends StatelessWidget {
             ),
             label: 'Create',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
+          BottomNavigationBarItem(
+            icon: Badge(
+              isLabelVisible: unreadTotal > 0,
+              label: Text('$unreadTotal'),
+              child: const Icon(Icons.chat_bubble_outline),
+            ),
+            activeIcon: Badge(
+              isLabelVisible: unreadTotal > 0,
+              label: Text('$unreadTotal'),
+              child: const Icon(Icons.chat_bubble),
+            ),
             label: 'Chat',
           ),
           const BottomNavigationBarItem(

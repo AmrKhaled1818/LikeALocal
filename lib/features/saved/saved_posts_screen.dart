@@ -43,7 +43,6 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: kBackground,
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -55,8 +54,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                   const Text('Saved Posts',
                       style: TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: kDark)),
+                          fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
                     isSuperUser
@@ -86,7 +84,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                       child: Text(
                         'Reach 1000 karma to save unlimited posts',
                         style: TextStyle(
-                            color: kDark,
+                            color: null,
                             fontSize: 13,
                             fontWeight: FontWeight.w500),
                       ),
@@ -108,7 +106,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: kDark)),
+                            color: null)),
                     const SizedBox(height: 4),
                     const Text('Pin posts from the feed to save them here',
                         style: TextStyle(color: kMutedFg)),

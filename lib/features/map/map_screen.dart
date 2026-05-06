@@ -35,6 +35,7 @@ class _MapScreenState extends State<MapScreen> {
   double? _maxDistanceKm; // F30 — null means no filter
 
   bool _darkMap = false;
+  bool _focusListenerAdded = false;
 
   static const _cairoCenter = LatLng(30.0444, 31.2357);
   static const _defaultZoom = 15.0;
@@ -58,13 +59,11 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
     _loadMapStyle();
-    // Auto-focus a post if navigated with focusPostId
     if (widget.focusPostId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _focusOnPost(widget.focusPostId!);
+        _tryFocusPost();
       });
     } else {
-      // Auto-open at current location
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _toggleFollow();
       });
@@ -76,8 +75,30 @@ class _MapScreenState extends State<MapScreen> {
     super.didUpdateWidget(oldWidget);
     if (widget.focusPostId != oldWidget.focusPostId && widget.focusPostId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _focusOnPost(widget.focusPostId!);
+        _tryFocusPost();
       });
+    }
+  }
+
+  // Tries to focus on a post; retries once posts finish loading if needed.
+  void _tryFocusPost() {
+    if (widget.focusPostId == null || !mounted) return;
+    final postsProvider = context.read<PostsProvider>();
+    if (!postsProvider.isLoading) {
+      _focusOnPost(widget.focusPostId!);
+    } else if (!_focusListenerAdded) {
+      _focusListenerAdded = true;
+      postsProvider.addListener(_onPostsLoaded);
+    }
+  }
+
+  void _onPostsLoaded() {
+    if (!mounted) return;
+    final postsProvider = context.read<PostsProvider>();
+    if (!postsProvider.isLoading) {
+      postsProvider.removeListener(_onPostsLoaded);
+      _focusListenerAdded = false;
+      _focusOnPost(widget.focusPostId!);
     }
   }
 
@@ -87,6 +108,13 @@ class _MapScreenState extends State<MapScreen> {
     if (post != null && post.lat != 0) {
       setState(() => _selectedPost = post);
       _mapController.move(LatLng(post.lat, post.lng), 16.0);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This post has no map location set.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -103,6 +131,9 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    if (_focusListenerAdded) {
+      context.read<PostsProvider>().removeListener(_onPostsLoaded);
+    }
     _locationSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -223,7 +254,6 @@ class _MapScreenState extends State<MapScreen> {
     double sliderVal = _maxDistanceKm ?? 5.0;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => StatefulBuilder(
@@ -341,7 +371,7 @@ class _MapScreenState extends State<MapScreen> {
                     style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
-                        color: kDark),
+                        color: null),
                   ),
                   const Spacer(),
                   GestureDetector(
@@ -386,7 +416,7 @@ class _MapScreenState extends State<MapScreen> {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
-                                      color: kDark),
+                                      color: null),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis),
                               const SizedBox(height: 2),
@@ -752,13 +782,13 @@ class _MapScreenState extends State<MapScreen> {
                   _MapButton(
                     color: Colors.white,
                     onTap: _zoomIn,
-                    child: const Icon(Icons.add, color: kDark, size: 22),
+                    child: const Icon(Icons.add, color: Colors.black87, size: 22),
                   ),
                   const SizedBox(height: 8),
                   _MapButton(
                     color: Colors.white,
                     onTap: _zoomOut,
-                    child: const Icon(Icons.remove, color: kDark, size: 22),
+                    child: const Icon(Icons.remove, color: Colors.black87, size: 22),
                   ),
                   const SizedBox(height: 8),
                   // F30 — distance filter button
@@ -791,7 +821,7 @@ class _MapScreenState extends State<MapScreen> {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [
                     BoxShadow(
@@ -839,7 +869,7 @@ class _MapScreenState extends State<MapScreen> {
       children: [
         CircleAvatar(radius: 5, backgroundColor: color),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, color: kDark)),
+        Text(label, style: const TextStyle(fontSize: 11)),
       ],
     );
   }
@@ -951,10 +981,10 @@ class _PostBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, -3)),
         ],
       ),
@@ -1049,7 +1079,7 @@ class _PostBottomSheet extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.bookmark_outline, size: 18, color: kOrange),
                   label: const Text('Pin for Later',
-                      style: TextStyle(color: kDark, fontWeight: FontWeight.w500)),
+                      style: TextStyle(color: null, fontWeight: FontWeight.w500)),
                 ),
               ),
             ],

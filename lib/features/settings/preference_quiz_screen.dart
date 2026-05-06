@@ -91,9 +91,7 @@ class _PreferenceQuizScreenState extends State<PreferenceQuizScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kDark,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => context.pop(),
@@ -222,7 +220,7 @@ class _QuizPage extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: kDark,
+                  color: null,
                   height: 1.2)),
           const SizedBox(height: 6),
           Text(subtitle,

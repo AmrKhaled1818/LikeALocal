@@ -56,106 +56,122 @@ class LikeALocalApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
       ],
-      child: Builder(
-        builder: (context) {
-          final themeProvider = context.watch<ThemeProvider>();
-          final authProvider =
-              Provider.of<AuthProvider>(context, listen: false);
-          final router = GoRouter(
-            initialLocation: '/splash',
-            refreshListenable: authProvider,
-            redirect: (ctx, state) {
-              final isLoggedIn = authProvider.isLoggedIn;
-              final loc = state.matchedLocation;
-              if (loc == '/splash' || loc == '/onboarding') return null;
-              if (!isLoggedIn && loc != '/login') return '/login';
-              if (isLoggedIn && loc == '/login') return '/feed';
-              return null;
-            },
-            routes: [
-              GoRoute(
-                path: '/splash',
-                builder: (_, __) => const SplashScreen(),
-              ),
-              GoRoute(
-                path: '/onboarding',
-                builder: (_, __) => const OnboardingScreen(),
-              ),
-              GoRoute(
-                path: '/login',
-                builder: (_, __) => const LoginScreen(),
-              ),
-              ShellRoute(
-                builder: (context, state, child) => _MainShell(
-                    location: state.matchedLocation, child: child),
-                routes: [
-                  GoRoute(
-                    path: '/feed',
-                    builder: (_, __) => const PostsScreen(),
-                  ),
-                  GoRoute(
-                    path: '/map',
-                    builder: (_, state) => MapScreen(
-                      focusPostId: state.uri.queryParameters['focusPostId'],
-                    ),
-                  ),
-                  GoRoute(
-                    path: '/create',
-                    builder: (_, __) => const CreatePostScreen(),
-                  ),
-                  GoRoute(
-                    path: '/chat',
-                    builder: (_, __) => const ChatScreen(),
-                  ),
-                  GoRoute(
-                    path: '/search',
-                    builder: (_, __) => const SearchScreen(),
-                  ),
-                ],
-              ),
-              GoRoute(
-                path: '/post/:postId',
-                builder: (_, state) => PostDetailScreen(
-                    postId: state.pathParameters['postId']!),
-              ),
-              GoRoute(
-                path: '/conversation/:chatId',
-                builder: (_, state) => ConversationScreen(
-                    chatId: state.pathParameters['chatId']!),
-              ),
-              GoRoute(
-                path: '/profile',
-                builder: (_, __) => const ProfileScreen(),
-              ),
-              GoRoute(
-                path: '/notifications',
-                builder: (_, __) => const NotificationsScreen(),
-              ),
-              GoRoute(
-                path: '/saved',
-                builder: (_, __) => const SavedPostsScreen(),
-              ),
-              GoRoute(
-                path: '/settings',
-                builder: (_, __) => const SettingsScreen(),
-              ),
-            ],
-            errorBuilder: (_, state) => Scaffold(
-              body: Center(
-                  child: Text('Page not found: ${state.error}')),
-            ),
-          );
+      child: const _AppRouter(),
+    );
+  }
+}
 
-          return MaterialApp.router(
-            title: 'LikeALocal',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.theme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.mode,
-            routerConfig: router,
-          );
-        },
+// Separate StatefulWidget so the GoRouter is created once and never recreated
+// on theme or auth rebuilds — fixes the duplicate GlobalKey crash.
+class _AppRouter extends StatefulWidget {
+  const _AppRouter();
+
+  @override
+  State<_AppRouter> createState() => _AppRouterState();
+}
+
+class _AppRouterState extends State<_AppRouter> {
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    final authProvider = context.read<AuthProvider>();
+    _router = GoRouter(
+      initialLocation: '/splash',
+      refreshListenable: authProvider,
+      redirect: (ctx, state) {
+        final isLoggedIn = authProvider.isLoggedIn;
+        final loc = state.matchedLocation;
+        if (loc == '/splash' || loc == '/onboarding') return null;
+        if (!isLoggedIn && loc != '/login') return '/login';
+        if (isLoggedIn && loc == '/login') return '/feed';
+        return null;
+      },
+      routes: [
+        GoRoute(
+          path: '/splash',
+          builder: (_, __) => const SplashScreen(),
+        ),
+        GoRoute(
+          path: '/onboarding',
+          builder: (_, __) => const OnboardingScreen(),
+        ),
+        GoRoute(
+          path: '/login',
+          builder: (_, __) => const LoginScreen(),
+        ),
+        ShellRoute(
+          builder: (context, state, child) =>
+              _MainShell(location: state.matchedLocation, child: child),
+          routes: [
+            GoRoute(
+              path: '/feed',
+              builder: (_, __) => const PostsScreen(),
+            ),
+            GoRoute(
+              path: '/map',
+              builder: (_, state) => MapScreen(
+                focusPostId: state.uri.queryParameters['focusPostId'],
+              ),
+            ),
+            GoRoute(
+              path: '/create',
+              builder: (_, __) => const CreatePostScreen(),
+            ),
+            GoRoute(
+              path: '/chat',
+              builder: (_, __) => const ChatScreen(),
+            ),
+            GoRoute(
+              path: '/search',
+              builder: (_, __) => const SearchScreen(),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: '/post/:postId',
+          builder: (_, state) =>
+              PostDetailScreen(postId: state.pathParameters['postId']!),
+        ),
+        GoRoute(
+          path: '/conversation/:chatId',
+          builder: (_, state) => ConversationScreen(
+              chatId: state.pathParameters['chatId']!),
+        ),
+        GoRoute(
+          path: '/profile',
+          builder: (_, __) => const ProfileScreen(),
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (_, __) => const NotificationsScreen(),
+        ),
+        GoRoute(
+          path: '/saved',
+          builder: (_, __) => const SavedPostsScreen(),
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (_, __) => const SettingsScreen(),
+        ),
+      ],
+      errorBuilder: (_, state) => Scaffold(
+        body: Center(child: Text('Page not found: ${state.error}')),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    return MaterialApp.router(
+      title: 'LikeALocal',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.theme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeProvider.mode,
+      routerConfig: _router,
     );
   }
 }
@@ -172,9 +188,10 @@ class _MainShell extends StatefulWidget {
 
 class _MainShellState extends State<_MainShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _prevIndex = 0;
 
-  int get _navIndex {
-    switch (widget.location) {
+  static int _indexFor(String loc) {
+    switch (loc) {
       case '/feed':
         return 0;
       case '/map':
@@ -190,10 +207,21 @@ class _MainShellState extends State<_MainShell> {
     }
   }
 
+  int get _navIndex => _indexFor(widget.location);
+
+  @override
+  void didUpdateWidget(_MainShell old) {
+    super.didUpdateWidget(old);
+    if (old.location != widget.location) {
+      _prevIndex = _indexFor(old.location);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final connectivity = context.watch<ConnectivityProvider>();
     final isCreate = widget.location == '/create';
+    final goingRight = _navIndex > _prevIndex;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -202,7 +230,30 @@ class _MainShellState extends State<_MainShell> {
       body: Column(
         children: [
           if (!connectivity.isOnline) const _OfflineBanner(),
-          Expanded(child: widget.child),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 120),
+              transitionBuilder: (child, animation) {
+                final offset = goingRight
+                    ? const Offset(1.0, 0.0)
+                    : const Offset(-1.0, 0.0);
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: offset,
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  )),
+                  child: child,
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey(widget.location),
+                child: widget.child,
+              ),
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: AppBottomNav(currentIndex: _navIndex),

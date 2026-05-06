@@ -83,9 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final remaining = (1000 - user.karma).clamp(0, 1000);
 
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kDark,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => context.pop(),
@@ -131,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildProfileHeader(UserModel user, double progress, int remaining) {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
@@ -185,8 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               Text(user.username,
                   style: const TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: kDark)),
+                      fontWeight: FontWeight.bold)),
               if (user.isSuperUser) ...[
                 const SizedBox(width: 8),
                 const SuperUserBadge(),
@@ -220,7 +217,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: kMuted,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -238,8 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           '${user.karma}',
                           style: const TextStyle(
                               fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: kDark),
+                              fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -338,7 +334,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: kDark)),
+                    color: null)),
             const SizedBox(height: 4),
             const Text('Share your first hidden gem!',
                 style: TextStyle(color: kMutedFg)),
@@ -395,7 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       children: [
                         Text('Saved limit reached (5/5)',
                             style: TextStyle(
-                                color: kDark,
+                                color: null,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13)),
                         Text('Reach 1000 karma to unlock unlimited saves',
@@ -421,7 +417,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: kDark)),
+                          color: null)),
                   const SizedBox(height: 4),
                   const Text('Pin posts to read them later',
                       style: TextStyle(color: kMutedFg)),
@@ -514,7 +510,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   Widget build(
           BuildContext context, double shrinkOffset, bool overlapsContent) =>
-      Container(color: Colors.white, child: tabBar);
+      Container(color: Theme.of(context).colorScheme.surface, child: tabBar);
 
   @override
   double get maxExtent => tabBar.preferredSize.height;
