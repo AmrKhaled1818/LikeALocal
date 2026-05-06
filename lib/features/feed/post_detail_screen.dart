@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
@@ -10,6 +12,8 @@ import '../../data/repositories/posts_repo.dart';
 import '../../data/repositories/chat_repo.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/user_provider.dart';
+import '../../shared/widgets/error_retry.dart';
+import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/super_user_badge.dart';
 
 class PostDetailScreen extends StatefulWidget {
@@ -26,6 +30,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _commentCtrl = TextEditingController();
   bool _submitting = false;
   PostModel? _post;
+  bool _loadError = false;
 
   @override
   void initState() {
@@ -34,8 +39,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   Future<void> _loadPost() async {
-    final post = await _repo.getPost(widget.postId);
-    if (mounted) setState(() => _post = post);
+    setState(() => _loadError = false);
+    try {
+      final post = await _repo.getPost(widget.postId);
+      if (mounted) setState(() => _post = post);
+    } catch (_) {
+      if (mounted) setState(() => _loadError = true);
+    }
   }
 
   @override
@@ -46,6 +56,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loadError) {
+      return Scaffold(
+        appBar: AppBar(backgroundColor: kDark),
+        body: ErrorRetryWidget(
+          message: 'Could not load post. Check your connection.',
+          onRetry: _loadPost,
+        ),
+      );
+    }
     if (_post == null) {
       return Scaffold(
         appBar: AppBar(backgroundColor: kDark),
@@ -71,17 +90,38 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                     onPressed: () => context.pop(),
                   ),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.share_outlined,
+                          color: Colors.white),
+                      onPressed: () => Share.share(
+                        'Check out "${post.title}" at ${post.location} on LikeALocal!',
+                        subject: post.title,
+                      ),
+                    ),
+                  ],
                   flexibleSpace: FlexibleSpaceBar(
                     background: post.imageUrl.isNotEmpty
-                        ? Hero(
-                            tag: post.postId,
-                            child: CachedNetworkImage(
-                              imageUrl: post.imageUrl,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => Container(
-                                  color: kMuted,
-                                  child: const Icon(Icons.image_outlined,
-                                      color: kMutedFg)),
+                        ? GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ImageViewerScreen(
+                                  imageUrl: post.imageUrl,
+                                  heroTag: post.postId,
+                                ),
+                              ),
+                            ),
+                            child: Hero(
+                              tag: post.postId,
+                              child: CachedNetworkImage(
+                                imageUrl: post.imageUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(
+                                    color: kMuted,
+                                    child: const Icon(Icons.image_outlined,
+                                        color: kMutedFg)),
+                              ),
                             ),
                           )
                         : Container(color: kMuted),
@@ -194,7 +234,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                       const SizedBox(height: 4),
                                       Text(post.localTips,
                                           style: const TextStyle(
-                                              fontSize: 13)),
+                                              fontSize: 13, color: kDark)),
                                     ],
                                   ),
                                 ),
@@ -223,11 +263,70 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 .toList(),
                           ),
                         ],
+
+                        // Show on Map button
+                        if (post.lat != 0 && post.lng != 0) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => context.go('/map?focusPostId=${post.postId}'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: kOrange,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  icon: const Icon(Icons.map_outlined, size: 18),
+                                  label: const Text('Show on Map',
+                                      style: TextStyle(fontWeight: FontWeight.w600)),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final url = Uri.parse(
+                                      'https://www.google.com/maps/dir/?api=1'
+                                      '&destination=${Uri.encodeComponent('${post.title}, ${post.location}')}'
+                                      '&travelmode=driving',
+                                    );
+                                    try {
+                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                    } catch (_) {
+                                      try {
+                                        await launchUrl(url, mode: LaunchMode.platformDefault);
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Could not open maps. Fully restart the app.'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1A73E8),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  icon: const Icon(Icons.directions, size: 18),
+                                  label: const Text('Get Directions',
+                                      style: TextStyle(fontWeight: FontWeight.w600)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+
                         const SizedBox(height: 20),
                         const Divider(),
                         const Text('Comments',
                             style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                                fontWeight: FontWeight.bold, fontSize: 16, color: kDark)),
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -454,7 +553,7 @@ class _CommentItemState extends State<_CommentItem> {
                   children: [
                     Text(c.username,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13)),
+                            fontWeight: FontWeight.w600, fontSize: 13, color: kDark)),
                     if (c.isSuperUser) ...[
                       const SizedBox(width: 4),
                       const SuperUserBadge(),
@@ -504,7 +603,7 @@ class _CommentItemState extends State<_CommentItem> {
                   )
                 else
                   Text(c.content,
-                      style: const TextStyle(fontSize: 13, height: 1.4)),
+                      style: const TextStyle(fontSize: 13, height: 1.4, color: kDark)),
               ],
             ),
           ),

@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'data/services/notification_service.dart';
 import 'features/auth/login_screen.dart';
+import 'features/onboarding/onboarding_screen.dart';
+import 'features/onboarding/splash_screen.dart';
 import 'features/chat/chat_screen.dart';
 import 'features/chat/conversation_screen.dart';
 import 'features/create/create_post_screen.dart';
@@ -23,6 +25,7 @@ import 'shared/providers/auth_provider.dart';
 import 'shared/providers/chat_provider.dart';
 import 'shared/providers/connectivity_provider.dart';
 import 'shared/providers/posts_provider.dart';
+import 'shared/providers/theme_provider.dart';
 import 'shared/providers/user_provider.dart';
 import 'shared/widgets/bottom_nav.dart';
 import 'shared/widgets/sidebar_menu.dart';
@@ -46,6 +49,7 @@ class LikeALocalApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => PostsProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
@@ -54,19 +58,29 @@ class LikeALocalApp extends StatelessWidget {
       ],
       child: Builder(
         builder: (context) {
+          final themeProvider = context.watch<ThemeProvider>();
           final authProvider =
               Provider.of<AuthProvider>(context, listen: false);
           final router = GoRouter(
-            initialLocation: '/feed',
+            initialLocation: '/splash',
             refreshListenable: authProvider,
             redirect: (ctx, state) {
               final isLoggedIn = authProvider.isLoggedIn;
-              final isLoginRoute = state.matchedLocation == '/login';
-              if (!isLoggedIn && !isLoginRoute) return '/login';
-              if (isLoggedIn && isLoginRoute) return '/feed';
+              final loc = state.matchedLocation;
+              if (loc == '/splash' || loc == '/onboarding') return null;
+              if (!isLoggedIn && loc != '/login') return '/login';
+              if (isLoggedIn && loc == '/login') return '/feed';
               return null;
             },
             routes: [
+              GoRoute(
+                path: '/splash',
+                builder: (_, __) => const SplashScreen(),
+              ),
+              GoRoute(
+                path: '/onboarding',
+                builder: (_, __) => const OnboardingScreen(),
+              ),
               GoRoute(
                 path: '/login',
                 builder: (_, __) => const LoginScreen(),
@@ -81,7 +95,9 @@ class LikeALocalApp extends StatelessWidget {
                   ),
                   GoRoute(
                     path: '/map',
-                    builder: (_, __) => const MapScreen(),
+                    builder: (_, state) => MapScreen(
+                      focusPostId: state.uri.queryParameters['focusPostId'],
+                    ),
                   ),
                   GoRoute(
                     path: '/create',
@@ -134,6 +150,8 @@ class LikeALocalApp extends StatelessWidget {
             title: 'LikeALocal',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.theme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.mode,
             routerConfig: router,
           );
         },

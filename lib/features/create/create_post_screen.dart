@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
@@ -34,6 +35,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   double? _pickedLat;
   double? _pickedLng;
 
+  static const _draftKey = 'create_post_draft';
+
   static const _categories = [
     'Restaurant',
     'Bar',
@@ -42,6 +45,60 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     'Viewpoint',
     'Shop',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDraft();
+    _titleCtrl.addListener(_saveDraft);
+    _descCtrl.addListener(_saveDraft);
+    _locationCtrl.addListener(_saveDraft);
+  }
+
+  Future<void> _loadDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final draft = prefs.getString(_draftKey);
+    if (draft == null || !mounted) return;
+    final parts = draft.split('\x00');
+    if (parts.length >= 3) {
+      setState(() {
+        _titleCtrl.text = parts[0];
+        _descCtrl.text = parts[1];
+        _locationCtrl.text = parts[2];
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Draft restored'),
+            action: SnackBarAction(
+              label: 'Discard',
+              onPressed: _clearDraft,
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final draft =
+        '${_titleCtrl.text}\x00${_descCtrl.text}\x00${_locationCtrl.text}';
+    await prefs.setString(_draftKey, draft);
+  }
+
+  Future<void> _clearDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_draftKey);
+    if (mounted) {
+      setState(() {
+        _titleCtrl.clear();
+        _descCtrl.clear();
+        _locationCtrl.clear();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -94,6 +151,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
@@ -136,15 +194,28 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Caption
+              // Caption — F23 character counter
               _label('Caption'),
-              TextFormField(
-                controller: _titleCtrl,
-                validator: (v) =>
-                    Validators.validateNotEmpty(v, 'Title'),
-                decoration: const InputDecoration(
-                  hintText: 'Share what makes this place special...',
-                ),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _titleCtrl,
+                builder: (_, val, __) {
+                  final count = val.text.length;
+                  final isOver = count > 500;
+                  return TextFormField(
+                    controller: _titleCtrl,
+                    maxLength: 500,
+                    validator: (v) =>
+                        Validators.validateNotEmpty(v, 'Title'),
+                    decoration: InputDecoration(
+                      hintText: 'Share what makes this place special...',
+                      counterText: '$count/500',
+                      counterStyle: TextStyle(
+                        color: isOver ? kDestructive : kMutedFg,
+                        fontSize: 12,
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 14),
 
@@ -361,20 +432,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<void> _pickImage() async {
     try {
       final picker = ImagePicker();
+      // F18 — Compress on pick: maxWidth 1080px + quality 72 targets ~300-420KB
       final picked = await picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1080,
-        imageQuality: 80,
+        maxHeight: 1080,
+        imageQuality: 72,
       );
       if (picked == null) return;
       final file = File(picked.path);
-      final size = await file.length();
-      if (size > 5 * 1024 * 1024) {
+      final bytes = await file.length();
+      if (bytes > 4 * 1024 * 1024) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content:
-                  Text('Image too large. Please choose a smaller image.'),
+              content: Text(
+                  'Image still too large after compression. Choose a smaller photo.'),
               backgroundColor: kDestructive,
             ),
           );
@@ -382,6 +455,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         return;
       }
       setState(() => _selectedImage = file);
+      if (mounted) {
+        final kb = (bytes / 1024).round();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image ready (${kb}KB)'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -426,6 +508,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           .read<PostsProvider>()
           .createPost(post, _selectedImage);
       if (id != null && mounted) {
+        await _clearDraft();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('Post shared!'),

@@ -1,12 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/providers/posts_provider.dart';
+import '../../shared/widgets/error_retry.dart';
 import '../../shared/widgets/post_card.dart';
 
-class PostsScreen extends StatelessWidget {
+class PostsScreen extends StatefulWidget {
   const PostsScreen({super.key});
+
+  @override
+  State<PostsScreen> createState() => _PostsScreenState();
+}
+
+class _PostsScreenState extends State<PostsScreen> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.extentAfter < 300) {
+      context.read<PostsProvider>().loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,10 +43,24 @@ class PostsScreen extends StatelessWidget {
         if (posts.isLoading) {
           return _buildShimmer();
         }
+        if (posts.error != null && posts.feedPosts.isEmpty) {
+          return ErrorRetryWidget(
+            message: posts.error!,
+            onRetry: posts.refresh,
+          );
+        }
         return RefreshIndicator(
           color: kOrange,
-          onRefresh: () async => posts.refresh(),
+          onRefresh: () async {
+            HapticFeedback.lightImpact();
+            posts.refresh();
+            // Wait for loading to complete
+            await Future.doWhile(
+                () => Future.delayed(const Duration(milliseconds: 100))
+                    .then((_) => posts.isLoading));
+          },
           child: CustomScrollView(
+            controller: _scrollCtrl,
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
@@ -29,9 +71,9 @@ class PostsScreen extends StatelessWidget {
                       Text(
                         'Hidden Gems Feed',
                         style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: kDark),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white),
                       ),
                       SizedBox(height: 4),
                       Text(
@@ -44,29 +86,11 @@ class PostsScreen extends StatelessWidget {
               ),
               if (posts.feedPosts.isEmpty)
                 SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.explore_outlined,
-                            size: 64, color: kMutedFg.withOpacity(0.4)),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No posts yet.',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                        const Text(
-                          'Be the first to share a hidden gem!',
-                          style: TextStyle(color: kMutedFg),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: _EmptyFeedState(),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, i) => Padding(
@@ -77,6 +101,30 @@ class PostsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              // Pagination footer
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: posts.isLoadingMore
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                                color: kOrange, strokeWidth: 2),
+                          ),
+                        )
+                      : !posts.hasMore && posts.feedPosts.isNotEmpty
+                          ? const Center(
+                              child: Text(
+                                'You\'ve seen everything!',
+                                style:
+                                    TextStyle(color: kMutedFg, fontSize: 13),
+                              ),
+                            )
+                          : const SizedBox(height: 80),
+                ),
+              ),
             ],
           ),
         );
@@ -90,14 +138,115 @@ class PostsScreen extends StatelessWidget {
       highlightColor: Colors.white,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: 3,
+        itemCount: 4,
         itemBuilder: (_, __) => Container(
           margin: const EdgeInsets.only(bottom: 16),
-          height: 300,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: kMuted),
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                          color: Colors.white, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                              height: 12,
+                              width: 130,
+                              color: Colors.white,
+                              margin: const EdgeInsets.only(bottom: 6)),
+                          Container(height: 10, width: 90, color: Colors.white),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  height: 14,
+                  width: 210,
+                  color: Colors.white),
+              const SizedBox(height: 8),
+              Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  height: 10,
+                  color: Colors.white),
+              const SizedBox(height: 4),
+              Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  height: 10,
+                  width: 160,
+                  color: Colors.white),
+              const SizedBox(height: 12),
+              Container(height: 180, width: double.infinity, color: Colors.white),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyFeedState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: kOrange.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.explore_outlined,
+                  size: 52, color: kOrange),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'No posts yet!',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: kDark),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Be the first to share a hidden gem in your city. Your local knowledge matters!',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: kMutedFg, fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => context.go('/create'),
+              icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+              label: const Text('Add a Place'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 14),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -37,18 +37,28 @@ dependencies:
   cached_network_image: ^3.0.0
   connectivity_plus: ^6.0.0
 
+  # ID generation
+  uuid: ^4.5.1
+
+  # Cloudinary SDK
+  cloudinary_public: ^0.23.1
+
   # Storage & Caching
   shared_preferences: ^2.0.0
 
   # UI
   shimmer: ^3.0.0
   timeago: ^3.0.0
+  share_plus: ^10.0.0
+  flutter_markdown: ^0.7.0
+  url_launcher: ^6.2.0
 
   # Navigation
   go_router: ^14.0.0
 
   # Notifications
   flutter_local_notifications: ^17.0.0
+  flutter_map_marker_cluster: ^1.4.0
 
 dev_dependencies:
   flutter_test:

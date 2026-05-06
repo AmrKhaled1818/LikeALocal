@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/providers/auth_provider.dart';
@@ -18,6 +19,72 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordCtrl = TextEditingController();
   final _usernameCtrl = TextEditingController();
   bool _obscurePassword = true;
+
+  bool _rememberMe = false;
+  bool _emailTouched = false;
+  bool _passwordTouched = false;
+  bool _usernameTouched = false;
+
+  String? get _emailError => Validators.validateEmail(_emailCtrl.text);
+  String? get _passwordError => Validators.validatePassword(_passwordCtrl.text);
+  String? get _usernameError => Validators.validateUsername(_usernameCtrl.text);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedEmail();
+    _emailCtrl.addListener(() {
+      if (!_emailTouched && _emailCtrl.text.isNotEmpty) {
+        setState(() => _emailTouched = true);
+      } else if (_emailTouched) {
+        setState(() {});
+      }
+    });
+    _passwordCtrl.addListener(() {
+      if (!_passwordTouched && _passwordCtrl.text.isNotEmpty) {
+        setState(() => _passwordTouched = true);
+      } else if (_passwordTouched) {
+        setState(() {});
+      }
+    });
+    _usernameCtrl.addListener(() {
+      if (!_usernameTouched && _usernameCtrl.text.isNotEmpty) {
+        setState(() => _usernameTouched = true);
+      } else if (_usernameTouched) {
+        setState(() {});
+      }
+    });
+  }
+
+  Future<void> _loadRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('remembered_email');
+    if (saved != null && saved.isNotEmpty && mounted) {
+      setState(() {
+        _emailCtrl.text = saved;
+        _rememberMe = true;
+        _emailTouched = true;
+      });
+    }
+  }
+
+  Future<void> _saveRememberedEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setString('remembered_email', email);
+    } else {
+      await prefs.remove('remembered_email');
+    }
+  }
+
+  Widget _validationIcon(bool touched, String? error) {
+    if (!touched) return const SizedBox.shrink();
+    return Icon(
+      error == null ? Icons.check_circle : Icons.cancel,
+      color: error == null ? Colors.green : kDestructive,
+      size: 20,
+    );
+  }
 
   @override
   void dispose() {
@@ -40,6 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
@@ -168,8 +236,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               controller: _emailCtrl,
                               keyboardType: TextInputType.emailAddress,
                               validator: Validators.validateEmail,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 hintText: 'you@example.com',
+                                suffixIcon: _validationIcon(
+                                    _emailTouched, _emailError),
                               ),
                             ),
                             const SizedBox(height: 14),
@@ -185,19 +255,50 @@ class _LoginScreenState extends State<LoginScreen> {
                               validator: Validators.validatePassword,
                               decoration: InputDecoration(
                                 hintText: '••••••••',
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    color: kMutedFg,
-                                    size: 20,
-                                  ),
-                                  onPressed: () => setState(
-                                      () => _obscurePassword = !_obscurePassword),
+                                suffixIcon: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _validationIcon(
+                                        _passwordTouched, _passwordError),
+                                    IconButton(
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                        color: kMutedFg,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => setState(() =>
+                                          _obscurePassword = !_obscurePassword),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
+                            if (_isLogin) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Checkbox(
+                                      value: _rememberMe,
+                                      activeColor: kOrange,
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(4)),
+                                      onChanged: (v) => setState(
+                                          () => _rememberMe = v ?? false),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('Remember me',
+                                      style: TextStyle(
+                                          fontSize: 13, color: kDark)),
+                                ],
+                              ),
+                            ],
                             if (!_isLogin) ...[
                               const SizedBox(height: 14),
                               const Text('Username',
@@ -209,8 +310,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               TextFormField(
                                 controller: _usernameCtrl,
                                 validator: Validators.validateUsername,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   hintText: 'explorer123',
+                                  suffixIcon: _validationIcon(
+                                      _usernameTouched, _usernameError),
                                 ),
                               ),
                             ],
@@ -321,6 +424,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     bool success;
     if (_isLogin) {
+      await _saveRememberedEmail(_emailCtrl.text.trim());
       success = await auth.signIn(
           _emailCtrl.text.trim(), _passwordCtrl.text);
     } else {

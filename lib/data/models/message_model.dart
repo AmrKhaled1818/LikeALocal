@@ -6,6 +6,7 @@ class MessageModel {
   final String text;
   final String type; // text, image, ai_response
   final Timestamp createdAt;
+  final List<String> readBy; // F32 — UIDs that have read this message
 
   MessageModel({
     required this.msgId,
@@ -13,7 +14,9 @@ class MessageModel {
     required this.text,
     this.type = 'text',
     Timestamp? createdAt,
-  }) : createdAt = createdAt ?? Timestamp.now();
+    List<String>? readBy,
+  })  : createdAt = createdAt ?? Timestamp.now(),
+        readBy = readBy ?? [];
 
   factory MessageModel.fromMap(Map<String, dynamic> map, String id) {
     return MessageModel(
@@ -22,6 +25,7 @@ class MessageModel {
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
       createdAt: map['createdAt'] ?? Timestamp.now(),
+      readBy: List<String>.from(map['readBy'] ?? []),
     );
   }
 
@@ -31,6 +35,7 @@ class MessageModel {
       'text': text,
       'type': type,
       'createdAt': createdAt,
+      'readBy': readBy,
     };
   }
 }

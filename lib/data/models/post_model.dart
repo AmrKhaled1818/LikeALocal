@@ -11,6 +11,7 @@ class PostModel {
   final String localTips;
   final List<String> recommendedDishes;
   final String imageUrl;
+  final String imagePublicId;
   final String location;
   final double lat;
   final double lng;
@@ -31,6 +32,7 @@ class PostModel {
     this.localTips = '',
     this.recommendedDishes = const [],
     this.imageUrl = '',
+    this.imagePublicId = '',
     this.location = '',
     this.lat = 0.0,
     this.lng = 0.0,
@@ -54,6 +56,7 @@ class PostModel {
       recommendedDishes:
           List<String>.from(map['recommendedDishes'] ?? []),
       imageUrl: map['imageUrl'] ?? '',
+      imagePublicId: map['imagePublicId'] ?? '',
       location: map['location'] ?? '',
       lat: (map['lat'] ?? 0.0).toDouble(),
       lng: (map['lng'] ?? 0.0).toDouble(),
@@ -77,6 +80,7 @@ class PostModel {
       'localTips': localTips,
       'recommendedDishes': recommendedDishes,
       'imageUrl': imageUrl,
+      'imagePublicId': imagePublicId,
       'location': location,
       'lat': lat,
       'lng': lng,
@@ -89,13 +93,15 @@ class PostModel {
   }
 
   PostModel copyWith({
+    String? postId,
     int? upvotes,
     int? downvotes,
     int? commentCount,
     String? imageUrl,
+    String? imagePublicId,
   }) {
     return PostModel(
-      postId: postId,
+      postId: postId ?? this.postId,
       userId: userId,
       username: username,
       userAvatarUrl: userAvatarUrl,
@@ -105,6 +111,7 @@ class PostModel {
       localTips: localTips,
       recommendedDishes: recommendedDishes,
       imageUrl: imageUrl ?? this.imageUrl,
+      imagePublicId: imagePublicId ?? this.imagePublicId,
       location: location,
       lat: lat,
       lng: lng,

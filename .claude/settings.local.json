@@ -32,7 +32,14 @@
       "PowerShell(adb shell pm clear com.example.like_a_local)",
       "PowerShell(adb shell cmd package trim-caches 1000000000)",
       "PowerShell(Get-ChildItem \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" -ErrorAction SilentlyContinue | Select-Object FullName)",
-      "PowerShell($adb = \"C:\\\\Users\\\\Dell\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb shell pm clear com.example.like_a_local; & $adb shell cmd package trim-caches 1000000000)"
+      "PowerShell($adb = \"C:\\\\Users\\\\Dell\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb shell pm clear com.example.like_a_local; & $adb shell cmd package trim-caches 1000000000)",
+      "Bash(python3 -c ' *)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Dell\\\\Desktop\\\\Mobile_Project\\\\lib\" -Recurse | Where-Object { $_.PSIsContainer } | Select-Object FullName | ForEach-Object { $_.FullName } | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\Dell\\\\Desktop\\\\Mobile_Project\\\\lib\" -Recurse -File | Select-Object FullName | ForEach-Object { $_.FullName } | Sort-Object)",
+      "Bash(keytool -list -v -keystore \"%USERPROFILE%\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android)",
+      "PowerShell(keytool -list -v -keystore \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android 2>&1 | Select-String \"SHA1|SHA256\")",
+      "PowerShell($javaHome = & flutter doctor --verbose 2>&1 | Select-String \"Java\" | Select-Object -First 1; Write-Output $javaHome; Get-ChildItem \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -ErrorAction SilentlyContinue)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Android\\\\Android Studio1\\\\jbr\\\\bin\\\\keytool.exe\" -list -v -keystore \"$env:USERPROFILE\\\\.android\\\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android 2>&1 | Select-String \"SHA1|SHA256\")"
     ]
   }
 }

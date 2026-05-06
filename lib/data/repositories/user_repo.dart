@@ -59,6 +59,10 @@ class UserRepo {
         .update({'chatSchedule': schedule});
   }
 
+  Future<void> deleteUserData(String uid) async {
+    await _db.collection('users').doc(uid).delete();
+  }
+
   Future<List<UserModel>> searchUsers(String query) async {
     final snap = await _db
         .collection('users')

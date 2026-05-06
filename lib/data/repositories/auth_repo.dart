@@ -1,12 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 
 class AuthRepo {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -28,6 +29,21 @@ class AuthRepo {
   }
 
   Future<UserCredential> signInWithGoogle() async {
+    if (kIsWeb) {
+      // On web, use Firebase Auth popup — no clientId needed
+      final provider = GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      final cred = await _auth.signInWithPopup(provider);
+      final doc = await _db.collection('users').doc(cred.user!.uid).get();
+      if (!doc.exists) {
+        await _createUserDoc(
+            cred.user!, cred.user!.displayName ?? cred.user!.email?.split('@')[0] ?? 'User');
+      }
+      return cred;
+    }
+
+    // Mobile flow — uses google_sign_in package
     final googleUser = await _googleSignIn.signIn();
     if (googleUser == null) throw Exception('Google sign-in cancelled');
     final googleAuth = await googleUser.authentication;
@@ -45,7 +61,9 @@ class AuthRepo {
   }
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    if (!kIsWeb) {
+      await _googleSignIn.signOut();
+    }
     await _auth.signOut();
   }
 

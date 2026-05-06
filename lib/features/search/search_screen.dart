@@ -1,6 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/post_model.dart';
 import '../../data/repositories/user_repo.dart';
 import '../../data/models/user_model.dart';
 import '../../shared/providers/posts_provider.dart';
@@ -37,7 +40,7 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -45,6 +48,17 @@ class _SearchScreenState extends State<SearchScreen>
     _searchCtrl.dispose();
     _tabCtrl.dispose();
     super.dispose();
+  }
+
+  /// Smarter matching — checks title, location, description, category,
+  /// tips, and recommended dishes. Supports multi-word queries where
+  /// each word is matched independently (AND logic).
+  bool _matchesPost(PostModel p, String query) {
+    final words = query.toLowerCase().split(RegExp(r'\s+'));
+    final haystack = '${p.title} ${p.location} ${p.description} '
+            '${p.category} ${p.localTips} ${p.recommendedDishes.join(' ')}'
+        .toLowerCase();
+    return words.every((w) => haystack.contains(w));
   }
 
   Future<void> _runSearch(String q) async {
@@ -67,6 +81,19 @@ class _SearchScreenState extends State<SearchScreen>
       if (mounted) setState(() => _searching = false);
     }
   }
+
+  // Category label for display
+  static const _catLabels = {
+    'Restaurant': 'Food',
+    'Bar': 'Food',
+    'Café': 'Cafes',
+    'Cafe': 'Cafes',
+    'Park': 'Parks',
+    'Viewpoint': 'Art',
+    'Shop': 'Shopping',
+  };
+
+  String _friendlyCategory(String cat) => _catLabels[cat] ?? cat;
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +133,7 @@ class _SearchScreenState extends State<SearchScreen>
             decoration: InputDecoration(
               prefixIcon:
                   const Icon(Icons.search, color: kMutedFg, size: 20),
-              hintText: 'Search posts, people, places...',
+              hintText: 'Search posts, places, people, categories...',
               suffixIcon: _searchCtrl.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.close, color: kMutedFg, size: 18),
@@ -130,6 +157,7 @@ class _SearchScreenState extends State<SearchScreen>
       unselectedLabelColor: kMutedFg,
       indicatorColor: kOrange,
       tabs: const [
+        Tab(text: 'Places'),
         Tab(text: 'Posts'),
         Tab(text: 'People'),
       ],
@@ -207,7 +235,8 @@ class _SearchScreenState extends State<SearchScreen>
     return TabBarView(
       controller: _tabCtrl,
       children: [
-        _PostResults(query: _query),
+        _PlaceResults(query: _query, matcher: _matchesPost, friendlyCategory: _friendlyCategory),
+        _PostResults(query: _query, matcher: _matchesPost),
         _PeopleResults(
           users: _userResults,
           searching: _searching,
@@ -216,6 +245,247 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 }
+
+// ── Place results with "Show on Map" button ─────────────────────────────
+
+class _PlaceResults extends StatelessWidget {
+  final String query;
+  final bool Function(PostModel, String) matcher;
+  final String Function(String) friendlyCategory;
+
+  const _PlaceResults({
+    required this.query,
+    required this.matcher,
+    required this.friendlyCategory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<PostsProvider>(
+      builder: (context, posts, _) {
+        final results = posts.feedPosts
+            .where((p) => matcher(p, query))
+            .toList();
+
+        if (results.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.place_outlined,
+                    size: 56, color: kMutedFg.withValues(alpha: 0.4)),
+                const SizedBox(height: 12),
+                Text('No places found for "$query"',
+                    style: const TextStyle(color: kMutedFg)),
+                const SizedBox(height: 6),
+                const Text('Try searching by name, area, or category',
+                    style: TextStyle(color: kMutedFg, fontSize: 12)),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: results.length,
+          itemBuilder: (_, i) {
+            final post = results[i];
+            final catLabel = friendlyCategory(post.category);
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kMuted),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (post.imageUrl.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      child: Image.network(
+                        post.imageUrl,
+                        height: 120,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 120,
+                          width: double.infinity,
+                          color: const Color(0xFFF3F4F6),
+                          child: const Icon(Icons.image_not_supported_outlined, color: kMutedFg),
+                        ),
+                      ),
+                    ),
+                  // Header row
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: kOrange.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.place,
+                              color: kOrange, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                post.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: kDark),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  const Icon(Icons.location_on_outlined,
+                                      size: 12, color: kMutedFg),
+                                  const SizedBox(width: 3),
+                                  Expanded(
+                                    child: Text(
+                                      post.location,
+                                      style: const TextStyle(
+                                          color: kMutedFg, fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: kOrange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            catLabel,
+                            style: const TextStyle(
+                                color: kOrange,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Description
+                  if (post.description.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                      child: Text(
+                        post.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: kMutedFg, fontSize: 13),
+                      ),
+                    ),
+
+                  // Tips badge
+                  if (post.localTips.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.lightbulb_outline,
+                              size: 14, color: kAmber),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              post.localTips,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: kDark,
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Action buttons
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              context.go('/map?focusPostId=${post.postId}');
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kOrange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: const Icon(Icons.map_outlined,
+                                size: 16),
+                            label: const Text('Show on Map',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                context.push('/post/${post.postId}'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: kDark,
+                              side: const BorderSide(color: kOrange),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: const Icon(Icons.info_outline,
+                                size: 16, color: kOrange),
+                            label: const Text('View Details',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── Trending tile ────────────────────────────────────────────────────────
 
 class _TrendingTile extends StatelessWidget {
   final int rank;
@@ -234,7 +504,7 @@ class _TrendingTile extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: rank <= 3 ? kOrange.withOpacity(0.1) : kMuted,
+          color: rank <= 3 ? kOrange.withValues(alpha: 0.1) : kMuted,
           shape: BoxShape.circle,
         ),
         child: Center(
@@ -256,6 +526,8 @@ class _TrendingTile extends StatelessWidget {
     );
   }
 }
+
+// ── Recommended section ──────────────────────────────────────────────────
 
 class _RecommendedSection extends StatelessWidget {
   @override
@@ -280,19 +552,19 @@ class _RecommendedSection extends StatelessWidget {
   }
 }
 
+// ── Post results (full cards) ────────────────────────────────────────────
+
 class _PostResults extends StatelessWidget {
   final String query;
-  const _PostResults({required this.query});
+  final bool Function(PostModel, String) matcher;
+  const _PostResults({required this.query, required this.matcher});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<PostsProvider>(
       builder: (context, posts, _) {
         final results = posts.feedPosts
-            .where((p) =>
-                p.title.toLowerCase().contains(query.toLowerCase()) ||
-                p.location.toLowerCase().contains(query.toLowerCase()) ||
-                p.description.toLowerCase().contains(query.toLowerCase()))
+            .where((p) => matcher(p, query))
             .toList();
 
         if (results.isEmpty) {
@@ -301,7 +573,7 @@ class _PostResults extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.search_off,
-                    size: 56, color: kMutedFg.withOpacity(0.4)),
+                    size: 56, color: kMutedFg.withValues(alpha: 0.4)),
                 const SizedBox(height: 12),
                 Text('No posts found for "$query"',
                     style: const TextStyle(color: kMutedFg)),
@@ -322,6 +594,8 @@ class _PostResults extends StatelessWidget {
     );
   }
 }
+
+// ── People results ───────────────────────────────────────────────────────
 
 class _PeopleResults extends StatelessWidget {
   final List<UserModel> users;
@@ -368,7 +642,7 @@ class _PeopleResults extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: kAmber.withOpacity(0.15),
+                    color: kAmber.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text('Super User',

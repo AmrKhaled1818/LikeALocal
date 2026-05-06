@@ -4,6 +4,7 @@ import 'app_colors.dart';
 class AppTheme {
   static ThemeData get theme => ThemeData(
         useMaterial3: true,
+        brightness: Brightness.light,
         primaryColor: kOrange,
         scaffoldBackgroundColor: kBackground,
         colorScheme: ColorScheme.fromSeed(
@@ -91,6 +92,108 @@ class AppTheme {
           color: kMuted,
           thickness: 1,
           space: 1,
+        ),
+      );
+
+  static ThemeData get darkTheme => ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        primaryColor: kOrange,
+        scaffoldBackgroundColor: const Color(0xFF111827),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: kOrange,
+          primary: kOrange,
+          brightness: Brightness.dark,
+          surface: const Color(0xFF1F2937),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF0F172A),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: kOrange,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Color(0xFF374151)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF1F2937),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: kOrange, width: 1.5),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: kDestructive),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          hintStyle: const TextStyle(color: Color(0xFF6B7280)),
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          selectedItemColor: kOrange,
+          unselectedItemColor: Color(0xFF6B7280),
+          backgroundColor: Color(0xFF0F172A),
+          type: BottomNavigationBarType.fixed,
+          elevation: 8,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFF374151)),
+          ),
+          color: const Color(0xFF1F2937),
+          margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+        ),
+        chipTheme: const ChipThemeData(
+          backgroundColor: Color(0xFF1F2937),
+          selectedColor: kOrange,
+          labelStyle: TextStyle(fontSize: 13, color: Colors.white),
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xFF374151),
+          thickness: 1,
+          space: 1,
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: WidgetStateProperty.resolveWith(
+              (s) => s.contains(WidgetState.selected) ? kOrange : null),
+          trackColor: WidgetStateProperty.resolveWith(
+              (s) => s.contains(WidgetState.selected)
+                  ? kOrange.withOpacity(0.4)
+                  : null),
         ),
       );
 }

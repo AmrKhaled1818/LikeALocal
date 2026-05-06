@@ -102,10 +102,28 @@ class ChatRepo {
   }
 
   Future<void> markRead(String chatId, String userId) async {
+    // Reset unread counter
     await _db
         .collection('chats')
         .doc(chatId)
         .update({'unreadCount.$userId': 0});
+
+    // F32 — Mark all messages NOT sent by this user as read by this user
+    final snap = await _db
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: userId)
+        .get();
+
+    if (snap.docs.isEmpty) return;
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'readBy': FieldValue.arrayUnion([userId]),
+      });
+    }
+    await batch.commit();
   }
 
   String aiChatId(String userId) => 'ai_$userId';

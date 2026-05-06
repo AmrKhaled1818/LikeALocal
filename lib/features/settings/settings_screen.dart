@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/providers/auth_provider.dart';
+import '../../shared/providers/theme_provider.dart';
 import '../../shared/providers/user_provider.dart';
 import 'preference_quiz_screen.dart';
 
@@ -74,6 +75,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.lock_outline,
             title: 'Change Password',
             onTap: () => _changePassword(context, auth),
+          ),
+          _SettingsTile(
+            icon: Icons.delete_forever_outlined,
+            title: 'Delete Account',
+            subtitle: 'Permanently remove your account',
+            onTap: () => _confirmDeleteAccount(context, auth),
           ),
           _SettingsTile(
             icon: Icons.email_outlined,
@@ -180,6 +187,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
           ],
+
+          // Appearance
+          _SectionHeader(title: 'Appearance'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Consumer<ThemeProvider>(
+              builder: (context, tp, _) => Container(
+                decoration: BoxDecoration(
+                  color: kMuted,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    _ThemeModeBtn(
+                      label: 'Light',
+                      icon: Icons.light_mode_outlined,
+                      selected: tp.mode == ThemeMode.light,
+                      onTap: () => tp.setMode(ThemeMode.light),
+                    ),
+                    _ThemeModeBtn(
+                      label: 'System',
+                      icon: Icons.brightness_auto_outlined,
+                      selected: tp.mode == ThemeMode.system,
+                      onTap: () => tp.setMode(ThemeMode.system),
+                    ),
+                    _ThemeModeBtn(
+                      label: 'Dark',
+                      icon: Icons.dark_mode_outlined,
+                      selected: tp.mode == ThemeMode.dark,
+                      onTap: () => tp.setMode(ThemeMode.dark),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
           // Notifications
           _SectionHeader(title: 'Notifications'),
@@ -340,6 +383,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _confirmDeleteAccount(BuildContext context, AuthProvider auth) {
+    final confirmCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('Delete Account',
+              style: TextStyle(color: kDestructive)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This is permanent. All your posts and data will be deleted.\n\nType DELETE to confirm:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmCtrl,
+                autofocus: true,
+                onChanged: (_) => setDialog(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'DELETE',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: kDestructive),
+              onPressed: confirmCtrl.text == 'DELETE'
+                  ? () async {
+                      Navigator.pop(ctx);
+                      final ok = await auth.deleteAccount();
+                      if (!ok && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(auth.errorMessage ??
+                                'Deletion failed'),
+                            backgroundColor: kDestructive,
+                          ),
+                        );
+                      }
+                    }
+                  : null,
+              child: const Text('Delete',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _confirmSignOut(BuildContext context) {
     showDialog(
       context: context,
@@ -415,6 +518,52 @@ class _SectionHeader extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2)),
+    );
+  }
+}
+
+class _ThemeModeBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ThemeModeBtn({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(3),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? kOrange : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 18,
+                  color: selected ? Colors.white : kMutedFg),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : kMutedFg)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -112,11 +113,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
       if (_isAiChat && auth.userModel != null) {
         final messages = await chatProvider.getMessages(widget.chatId).first;
+        final allPosts = context.read<PostsProvider>().feedPosts;
+        final availablePlaces = allPosts.map((p) => '${p.title} in ${p.location}').join(', ');
+
         final reply = await AIService().getAIResponse(
           messages,
           auth.userModel!,
           lat: _position?.latitude,
           lng: _position?.longitude,
+          availablePlaces: availablePlaces,
         );
 
         final aiMsg = MessageModel(
@@ -235,7 +240,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _MessageBubble(
-                            message: msg, isMe: isMe, isAi: isAi),
+                          message: msg,
+                          isMe: isMe,
+                          isAi: isAi,
+                          myUid: auth.uid,
+                        ),
                         if (related.isNotEmpty)
                           _RelatedPostsRow(posts: related),
                       ],
@@ -245,8 +254,54 @@ class _ConversationScreenState extends State<ConversationScreen> {
               },
             ),
           ),
+          // F36 — AI quick-reply suggestion chips
+          if (_isAiChat) _buildSuggestionChips(),
           _buildInputBar(),
         ],
+      ),
+    );
+  }
+
+  // F36 — Quick-reply chips
+  static const _quickReplies = [
+    'Tell me more',
+    'Any alternatives?',
+    'How to get there?',
+    'What are the prices?',
+    'Best time to visit?',
+  ];
+
+  Widget _buildSuggestionChips() {
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: _quickReplies.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (_, i) => GestureDetector(
+          onTap: () {
+            _msgCtrl.text = _quickReplies[i];
+            _msgCtrl.selection = TextSelection.fromPosition(
+                TextPosition(offset: _msgCtrl.text.length));
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3E8FF),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+            ),
+            child: Text(
+              _quickReplies[i],
+              style: const TextStyle(
+                  color: Color(0xFF6D28D9),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -525,15 +580,21 @@ class _MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMe;
   final bool isAi;
+  final String myUid;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
     required this.isAi,
+    required this.myUid,
   });
 
   @override
   Widget build(BuildContext context) {
+    // F32 — Read receipt: has anyone else read this message?
+    final isRead = isMe &&
+        message.readBy.any((uid) => uid != myUid);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -569,44 +630,91 @@ class _MessageBubble extends StatelessWidget {
             const SizedBox(width: 6),
           ],
           Flexible(
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.72,
-              ),
-              decoration: BoxDecoration(
-                color: isMe
-                    ? kOrange
-                    : isAi
-                        ? const Color(0xFFF3E8FF)
-                        : Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isMe ? 16 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 16),
+            child: Column(
+              crossAxisAlignment:
+                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.72,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isMe
+                        ? kOrange
+                        : isAi
+                            ? const Color(0xFFF3E8FF)
+                            : Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isMe ? 16 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  // F37 — Render AI responses with markdown
+                  child: isAi
+                      ? MarkdownBody(
+                          data: message.text,
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(
+                                color: Color(0xFF6D28D9),
+                                fontSize: 14,
+                                height: 1.4),
+                            strong: const TextStyle(
+                                color: Color(0xFF6D28D9),
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold),
+                            listBullet: const TextStyle(
+                                color: Color(0xFF6D28D9), fontSize: 14),
+                            h1: const TextStyle(
+                                color: Color(0xFF6D28D9),
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold),
+                            h2: const TextStyle(
+                                color: Color(0xFF6D28D9),
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      : Text(
+                          message.text,
+                          style: TextStyle(
+                            color: isMe ? Colors.white : kDark,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+                // F32 — Read receipt ticks (only on my sent messages)
+                if (isMe) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.done,
+                        size: 12,
+                        color: isRead ? Colors.blue : kMutedFg,
+                      ),
+                      if (isRead)
+                        const Icon(
+                          Icons.done,
+                          size: 12,
+                          color: Colors.blue,
+                        ),
+                    ],
                   ),
                 ],
-              ),
-              child: Text(
-                message.text,
-                style: TextStyle(
-                  color: isMe
-                      ? Colors.white
-                      : isAi
-                          ? const Color(0xFF6D28D9)
-                          : kDark,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
+              ],
             ),
           ),
           if (isMe) const SizedBox(width: 6),

@@ -42,7 +42,6 @@ class NotificationsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('notifications')
             .where('userId', isEqualTo: auth.uid)
-            .orderBy('createdAt', descending: true)
             .limit(50)
             .snapshots(),
         builder: (context, snap) {
@@ -51,7 +50,14 @@ class NotificationsScreen extends StatelessWidget {
                 child: CircularProgressIndicator(color: kOrange));
           }
 
-          final docs = snap.data?.docs ?? [];
+          // Sort client-side to avoid composite index requirement
+          final docs = List.from(snap.data?.docs ?? [])
+            ..sort((a, b) {
+              final aTime = (a.data() as Map)['createdAt'];
+              final bTime = (b.data() as Map)['createdAt'];
+              if (aTime == null || bTime == null) return 0;
+              return bTime.compareTo(aTime);
+            });
           if (docs.isEmpty) {
             return Center(
               child: Column(

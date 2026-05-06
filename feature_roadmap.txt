@@ -1,0 +1,44 @@
+# LIKEALOCAL FEATURE ROADMAP
+
+## Must-Have - These genuinely matter for the app
+--------------------------------------------------
+F1  | Onboarding slides (3 screens, shown once)            | Every real app has this — sets context for new users
+F2  | Splash screen animation                               | Hides cold-start load time, looks professional
+F3  | Password eye toggle                                   | Basic UX — testers will notice instantly if missing
+F5  | Real-time form validation (green/red icons as type)   | Stops confusing login errors
+F8  | Pull-to-refresh polish (orange spinner + haptic)      | Already works, just needs the color + vibration
+F9  | Full-screen image zoom (pinch + double-tap)           | Cairo discovery app is photo-driven — this is critical
+F11 | Share post                                            | Viral growth mechanic — also a test case
+F13 | Skeleton shimmer loading                              | Makes the feed feel fast instead of blank
+F14 | Empty feed state (illustration + "Add a Place" button)| Without this, new users see a blank white screen
+F15 | Double-tap to upvote (heart animation)                | Core engagement feature, expected on modern apps
+F17 | Category color chips (Restaurant=orange, Park=green…)| Quick win, makes cards much more scannable
+F22 | Draft auto-save on create post                        | Prevents losing a half-written post — users hate that
+F23 | Character counter on caption (X/500, turns red)       | 15-minute job, test case 66 checks for it
+F26 | Pulsing location dot on map                           | Confirms to user their GPS is live and working
+F29 | Distance badge on map pins ("0.3 km")                 | Core "near me" value prop of a local discovery app
+F30 | Filter by distance slider                             | Most useful map feature — "show only within 2km"
+F36 | AI quick-reply suggestion chips                       | Already partially planned — fast win for chat screen
+F37 | AI message formatting (bold, bullets from markdown)   | AI responses are unreadable walls of text right now
+F43 | Dark mode (Light/Dark/System toggle in settings)      | Test 176 checks every single screen in dark mode
+F46 | Haptic feedback (light on tap, medium on upvote)      | Tiny code, big feel difference
+F48 | Connectivity banner ("You're offline")                | ConnectivityProvider already exists, just needs banner
+F51 | Error retry button on failed screens                  | Critical — right now a failed load = dead end
+F52 | Keyboard avoidance (inputs never hidden)              | Test 52 checks every screen with a text field
+
+
+## Good to Have - Adds real value, moderate effort
+--------------------------------------------------
+F6  | Remember Me (pre-fill email on next open)             | Small convenience, test 20 checks it
+F7  | Account deletion (type "DELETE" to confirm)           | Privacy compliance, test 24 checks it
+F10 | Swipe right on post card to save                      | Fun gesture — more discoverable than bookmark icon
+F12 | Report post (3-dot menu -> reason sheet)              | Basic moderation for user-generated content
+F16 | Infinite scroll pagination (load 10 at a time)        | Performance will suffer with 50+ posts
+F18 | Image compression before upload (3MB -> 420KB)        | Firebase Storage costs money — keep images small
+F25 | Marker clustering on map                              | Without this, 30+ pins at zoom-out is a mess
+F27 | Map style toggle (Standard -> Dark -> back)           | 2 tile URL swaps + preference save — very quick
+F32 | Read receipts (single tick / double tick)             | Adds quality to the chat feature
+F41 | Karma history bottom sheet                           | Makes the karma system feel meaningful
+F47 | Pull-down to dismiss all modals                       | Test 177 checks every bottom sheet and dialog
+F49 | Shimmer placeholder on every CachedNetworkImage       | Consistency across the app
+F53 | Unread badge count on notification bell               | Already partially there, needs count number

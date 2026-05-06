@@ -1,45 +1,92 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/models/post_model.dart';
 import '../../data/repositories/posts_repo.dart';
+import '../../data/seed_places.dart';
 
 class PostsProvider extends ChangeNotifier {
   final PostsRepo _repo = PostsRepo();
 
   List<PostModel> _feedPosts = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  DocumentSnapshot? _lastDoc;
   String? _error;
+
+  static const _pageSize = 10;
 
   List<PostModel> get feedPosts => _feedPosts;
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;
+  bool get hasMore => _hasMore;
   String? get error => _error;
 
   PostsProvider() {
-    _init();
+    _loadFirstPage();
   }
 
-  void _init() {
-    _repo.getFeedPosts().listen(
-      (posts) {
-        _feedPosts = posts;
-        _isLoading = false;
-        notifyListeners();
-      },
-      onError: (e) {
-        _error = e.toString();
-        _isLoading = false;
-        notifyListeners();
-      },
-    );
+  Future<void> _loadFirstPage() async {
+    _isLoading = true;
+    _error = null;
+    _hasMore = true;
+    _lastDoc = null;
+    notifyListeners();
+    try {
+      // Seed curated places to Firestore (skips existing ones)
+      SeedPlaces.seedToFirestore().catchError((_) => 0);
+
+      final (posts, lastDoc) = await _repo.getFeedPage(limit: _pageSize);
+      _feedPosts = posts;
+      _lastDoc = lastDoc;
+      _hasMore = posts.length == _pageSize;
+
+      // Merge any seed places not yet in the paginated feed so they
+      // always appear on the map regardless of pagination state.
+      final existingIds = _feedPosts.map((p) => p.postId).toSet();
+      for (final seed in SeedPlaces.all) {
+        if (!existingIds.contains(seed.postId)) {
+          _feedPosts.add(seed);
+        }
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    _isLoadingMore = true;
+    notifyListeners();
+    try {
+      final (posts, lastDoc) =
+          await _repo.getFeedPage(limit: _pageSize, startAfter: _lastDoc);
+      _feedPosts = [..._feedPosts, ...posts];
+      _lastDoc = lastDoc;
+      _hasMore = posts.length == _pageSize;
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoadingMore = false;
+      notifyListeners();
+    }
   }
 
   Future<String?> createPost(PostModel post, File? imageFile) async {
     try {
-      return await _repo.createPost(post, imageFile);
+      final id = await _repo.createPost(post, imageFile);
+      final newPost = post.copyWith(postId: id);
+      _feedPosts = [newPost, ..._feedPosts];
+      notifyListeners();
+      return id;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      return null;
+      rethrow;
     }
   }
 
@@ -101,8 +148,6 @@ class PostsProvider extends ChangeNotifier {
   }
 
   void refresh() {
-    _isLoading = true;
-    notifyListeners();
-    _init();
+    _loadFirstPage();
   }
 }

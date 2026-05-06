@@ -11,18 +11,21 @@ class AIService {
 
   Future<String> getAIResponse(
       List<MessageModel> history, UserModel currentUser,
-      {double? lat, double? lng}) async {
+      {double? lat, double? lng, String? availablePlaces}) async {
     final prefs = currentUser.preferences;
     final favCats = (prefs['favCategories'] as List?)?.join(', ') ?? '';
     final locationText = (lat != null && lng != null)
         ? ' The user is currently located at latitude=$lat, longitude=$lng.'
+        : '';
+    final placesText = (availablePlaces != null && availablePlaces.isNotEmpty)
+        ? ' Here are the places available in our app (always try to recommend from these if possible): $availablePlaces.'
         : '';
 
     final systemText =
         'You are the AI Discovery Assistant for LikeALocal, a local travel app. '
         'The user\'s preferences: budget=${prefs['budget'] ?? 'any'}, '
         'atmosphere=${prefs['atmosphere'] ?? 'any'}, '
-        'favorite categories=$favCats.$locationText '
+        'favorite categories=$favCats.$locationText$placesText '
         'Help them discover hidden gems, restaurants, and local experiences. '
         'Be friendly, concise, and always suggest specific place names with their neighborhood or area.';
 

@@ -91,6 +91,26 @@ class AuthProvider extends ChangeNotifier {
     await _authRepo.signOut();
   }
 
+  Future<bool> deleteAccount() async {
+    _setLoading(true);
+    try {
+      final uid = _firebaseUser?.uid;
+      if (uid == null) return false;
+      await _userRepo.deleteUserData(uid);
+      await _firebaseUser?.delete();
+      _clearError();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _setError(e.message ?? 'Deletion failed. Please re-login and try again.');
+      return false;
+    } catch (e) {
+      _setError(e.toString());
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<bool> resetPassword(String email) async {
     _setLoading(true);
     try {

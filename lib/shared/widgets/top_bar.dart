@@ -1,9 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/providers/auth_provider.dart';
-import '../../shared/providers/chat_provider.dart';
 
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final GlobalKey<ScaffoldState>? scaffoldKey;
@@ -46,38 +46,56 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        Consumer<ChatProvider>(
-          builder: (context, chatProvider, _) {
-            final authProvider = context.read<AuthProvider>();
-            final unread = chatProvider.getUnreadCount(authProvider.uid);
-            return Stack(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_outlined,
-                      color: Colors.white),
-                  onPressed: () => context.push('/notifications'),
-                ),
-                if (unread > 0)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: kDestructive,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        unread > 9 ? '9+' : '$unread',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
+        // F53 — Unread notification badge
+        Consumer<AuthProvider>(
+          builder: (context, auth, _) {
+            if (auth.uid.isEmpty) {
+              return IconButton(
+                icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                onPressed: () => context.push('/notifications'),
+              );
+            }
+            return StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('notifications')
+                  .where('userId', isEqualTo: auth.uid)
+                  .snapshots(),
+              builder: (context, snap) {
+                // Filter unread client-side to avoid composite index
+                final unread = snap.data?.docs
+                        .where((d) => (d.data() as Map)['read'] == false)
+                        .length ??
+                    0;
+                return Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined,
+                          color: Colors.white),
+                      onPressed: () => context.push('/notifications'),
+                    ),
+                    if (unread > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(
+                            color: kDestructive,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unread > 9 ? '9+' : '$unread',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                );
+              },
             );
           },
         ),
