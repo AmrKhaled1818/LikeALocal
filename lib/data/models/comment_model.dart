@@ -9,9 +9,12 @@ class CommentModel {
   final bool isSuperUser;
   final String content;
   final int upvotes;
+  final List<String> likedBy; // userIds who hearted this comment
   final String? parentId;
   final Timestamp createdAt;
   final Timestamp? editedAt;
+
+  int get likeCount => likedBy.length;
 
   CommentModel({
     required this.commentId,
@@ -22,6 +25,7 @@ class CommentModel {
     this.isSuperUser = false,
     required this.content,
     this.upvotes = 0,
+    this.likedBy = const [],
     this.parentId,
     Timestamp? createdAt,
     this.editedAt,
@@ -37,6 +41,7 @@ class CommentModel {
       isSuperUser: map['isSuperUser'] ?? false,
       content: map['content'] ?? '',
       upvotes: map['upvotes'] ?? 0,
+      likedBy: List<String>.from(map['likedBy'] ?? []),
       parentId: map['parentId'],
       createdAt: map['createdAt'] ?? Timestamp.now(),
       editedAt: map['editedAt'],
@@ -52,6 +57,7 @@ class CommentModel {
       'isSuperUser': isSuperUser,
       'content': content,
       'upvotes': upvotes,
+      'likedBy': likedBy,
       'parentId': parentId,
       'createdAt': createdAt,
       'editedAt': editedAt,

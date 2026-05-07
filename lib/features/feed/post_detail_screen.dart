@@ -32,6 +32,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _commentCtrl = TextEditingController();
   bool _submitting = false;
 
+  String _resolveAvatar(PostModel post, AuthProvider auth) {
+    if (post.userId == auth.uid) {
+      return auth.userModel?.avatarUrl ?? post.userAvatarUrl;
+    }
+    return post.userAvatarUrl;
+  }
+
   @override
   void dispose() {
     _commentCtrl.dispose();
@@ -63,12 +70,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
         final post = snap.data!;
         final isOwner = post.userId == auth.uid;
-        return _buildScaffold(context, post, isOwner);
+        return _buildScaffold(context, post, isOwner, auth);
       },
     );
   }
 
-  Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner) {
+  Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner, AuthProvider auth) {
     return Scaffold(
       body: Column(
         children: [
@@ -84,7 +91,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     onPressed: () => context.pop(),
                   ),
                   actions: [
-                    if (isOwner)
+                    if (isOwner) ...[
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, color: Colors.white),
                         tooltip: 'Edit post',
@@ -97,6 +104,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           );
                         },
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.white),
+                        tooltip: 'Delete post',
+                        onPressed: () => _confirmDeletePost(context),
+                      ),
+                    ],
                     IconButton(
                       icon: const Icon(Icons.share_outlined,
                           color: Colors.white),
@@ -146,11 +159,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           children: [
                             CircleAvatar(
                               radius: 18,
-                              backgroundImage: post.userAvatarUrl.isNotEmpty
-                                  ? NetworkImage(post.userAvatarUrl)
+                              backgroundImage: _resolveAvatar(post, auth).isNotEmpty
+                                  ? NetworkImage(_resolveAvatar(post, auth))
                                   : null,
                               backgroundColor: kOrange,
-                              child: post.userAvatarUrl.isEmpty
+                              child: _resolveAvatar(post, auth).isEmpty
                                   ? Text(
                                       post.username
                                           .substring(0, 1)
@@ -430,6 +443,39 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  Future<void> _confirmDeletePost(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete post?'),
+        content: const Text('This will permanently delete your post and all its comments. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: kDestructive),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      final ok = await context.read<PostsProvider>().deletePost(widget.postId);
+      if (mounted) {
+        if (ok) {
+          context.go('/feed');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to delete post. Try again.'), backgroundColor: kDestructive),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _submitComment(BuildContext context) async {
     final text = _commentCtrl.text.trim();
     if (text.isEmpty) return;
@@ -527,10 +573,21 @@ class _CommentItemState extends State<_CommentItem> {
     super.dispose();
   }
 
+  Future<void> _toggleLike(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.uid.isEmpty) return;
+    final liked = widget.comment.likedBy.contains(auth.uid);
+    try {
+      await _repo.toggleCommentLike(
+          widget.postId, widget.comment.commentId, auth.uid, !liked);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthProvider>();
     final isAuthor = widget.comment.userId == auth.uid;
+    final isLiked = widget.comment.likedBy.contains(auth.uid);
     final c = widget.comment;
 
     return Container(
@@ -583,10 +640,26 @@ class _CommentItemState extends State<_CommentItem> {
                     children: [
                       TextField(
                         controller: _editCtrl,
-                        maxLines: null,
-                        decoration: const InputDecoration(
-                          contentPadding: EdgeInsets.symmetric(
+                        autofocus: true,
+                        maxLines: 4,
+                        minLines: 1,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: kMutedFg),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: kOrange),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -601,7 +674,11 @@ class _CommentItemState extends State<_CommentItem> {
                           ),
                           ElevatedButton(
                             onPressed: _saveEdit,
-                            child: const Text('Save'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kOrange,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                            child: const Text('Save', style: TextStyle(color: Colors.white)),
                           ),
                         ],
                       ),
@@ -610,25 +687,55 @@ class _CommentItemState extends State<_CommentItem> {
                 else
                   Text(c.content,
                       style: const TextStyle(fontSize: 13, height: 1.4, color: null)),
+                // Heart reaction row
+                if (!_editing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _toggleLike(context),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isLiked ? Icons.favorite : Icons.favorite_border,
+                                size: 14,
+                                color: isLiked ? Colors.red : kMutedFg,
+                              ),
+                              if (c.likeCount > 0) ...[
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${c.likeCount}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isLiked ? Colors.red : kMutedFg,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (isAuthor) ...[
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => setState(() => _editing = true),
+                            child: const Text('Edit',
+                                style: TextStyle(color: kMutedFg, fontSize: 11)),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => _confirmDelete(context),
+                            child: const Text('Delete',
+                                style: TextStyle(color: kDestructive, fontSize: 11)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
-          if (isAuthor && !_editing)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 16, color: kMutedFg),
-              onSelected: (val) {
-                if (val == 'edit') setState(() => _editing = true);
-                if (val == 'delete') _confirmDelete(context);
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete',
-                      style: TextStyle(color: kDestructive)),
-                ),
-              ],
-            ),
         ],
       ),
     );

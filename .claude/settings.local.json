@@ -54,7 +54,8 @@
       "Bash(python -c ' *)",
       "Bash(curl -s https://openrouter.ai/api/v1/chat/completions -H 'Authorization: Bearer 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' -H 'Content-Type: application/json' -H 'HTTP-Referer: https://likealocal.app' -H 'X-Title: LikeALocal' -d '{\"model\":\"openai/gpt-oss-20b:free\",\"messages\":[{\"role\":\"user\",\"content\":\"Recommend a hidden cafe in New Cairo\"}],\"max_tokens\":200,\"temperature\":0.3}')",
       "Bash(curl -s https://openrouter.ai/api/v1/chat/completions -H 'Authorization: Bearer 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' -H 'Content-Type: application/json' -H 'HTTP-Referer: https://likealocal.app' -H 'X-Title: LikeALocal' -d '{\"model\":\"openai/gpt-oss-20b:free\",\"messages\":[{\"role\":\"system\",\"content\":\"You are AI assistant for LikeALocal app. Be concise.\"},{\"role\":\"user\",\"content\":\"suggest a cafe near New Cairo\"}],\"max_tokens\":150,\"temperature\":0.3}')",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('choices',[{}]\\)[0].get\\('message',{}\\).get\\('content','ERROR: '+str\\(d\\)\\)\\)\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('choices',[{}]\\)[0].get\\('message',{}\\).get\\('content','ERROR: '+str\\(d\\)\\)\\)\")",
+      "Bash(/mnt/c/flutter/bin/flutter.bat analyze *)"
     ]
   }
 }

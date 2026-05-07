@@ -17,6 +17,14 @@ class CloudinaryService {
   static const String _uploadPreset = 'likealocal_unsigned';
 
   Future<CloudinaryUploadResult> uploadImage(File imageFile) async {
+    return _upload(imageFile, 'likealocal/posts');
+  }
+
+  Future<CloudinaryUploadResult> uploadAvatar(File imageFile) async {
+    return _upload(imageFile, 'likealocal/avatars');
+  }
+
+  Future<CloudinaryUploadResult> _upload(File imageFile, String folder) async {
     if (!await imageFile.exists()) {
       throw Exception('Selected image file does not exist.');
     }
@@ -27,7 +35,7 @@ class CloudinaryService {
       final response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
           imageFile.path,
-          folder: 'likealocal/posts',
+          folder: folder,
           resourceType: CloudinaryResourceType.Image,
         ),
       );

@@ -59,12 +59,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loadRememberedEmail() async {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('remembered_email');
-    if (saved != null && saved.isNotEmpty && mounted) {
+    final savedEmail = prefs.getString('remembered_email');
+    final savedPassword = prefs.getString('remembered_password');
+    if (savedEmail != null && savedEmail.isNotEmpty && mounted) {
       setState(() {
-        _emailCtrl.text = saved;
+        _emailCtrl.text = savedEmail;
         _rememberMe = true;
         _emailTouched = true;
+      });
+    }
+    if (savedPassword != null && savedPassword.isNotEmpty && mounted) {
+      setState(() {
+        _passwordCtrl.text = savedPassword;
+        _passwordTouched = true;
       });
     }
   }
@@ -73,8 +80,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (_rememberMe) {
       await prefs.setString('remembered_email', email);
+      await prefs.setString('remembered_password', _passwordCtrl.text);
     } else {
       await prefs.remove('remembered_email');
+      await prefs.remove('remembered_password');
     }
   }
 

@@ -103,8 +103,12 @@ class _PostCardState extends State<PostCard>
     final post = widget.post;
     final createdAt = post.createdAt.toDate();
     final catColor = _catColor(post.category);
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final auth = context.watch<AuthProvider>();
+    final avatarUrl = (post.userId == auth.uid)
+        ? (auth.userModel?.avatarUrl ?? post.userAvatarUrl)
+        : post.userAvatarUrl;
 
     return GestureDetector(
       onTap: () => context.push('/post/${post.postId}'),
@@ -137,10 +141,10 @@ class _PostCardState extends State<PostCard>
                       CircleAvatar(
                         radius: 18,
                         backgroundColor: kOrange,
-                        backgroundImage: post.userAvatarUrl.isNotEmpty
-                            ? NetworkImage(post.userAvatarUrl)
+                        backgroundImage: avatarUrl.isNotEmpty
+                            ? NetworkImage(avatarUrl)
                             : null,
-                        child: post.userAvatarUrl.isEmpty
+                        child: avatarUrl.isEmpty
                             ? Text(
                                 post.username.substring(0, 1).toUpperCase(),
                                 style: const TextStyle(
@@ -523,23 +527,45 @@ class _PostCardState extends State<PostCard>
     }
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
     final auth = context.read<AuthProvider>();
     final posts = context.read<PostsProvider>();
     if (auth.uid.isEmpty) return;
 
     HapticFeedback.lightImpact();
-    setState(() => _isSaved = !_isSaved);
+
     if (_isSaved) {
-      posts.savePost(auth.uid, widget.post.postId);
+      // Unsave — always allowed
+      setState(() => _isSaved = false);
+      await posts.unsavePost(auth.uid, widget.post.postId);
+      return;
+    }
+
+    // Check save limit for free users
+    final isSuperUser = auth.userModel?.isSuperUser ?? false;
+    if (!isSuperUser) {
+      final savedPosts = await posts.getSavedPosts(auth.uid);
+      if (!mounted) return;
+      if (savedPosts.length >= 5) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Save limit reached (5/5). Unsave a post or earn 100 karma to unlock unlimited saves.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    }
+
+    setState(() => _isSaved = true);
+    await posts.savePost(auth.uid, widget.post.postId);
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Pinned!'),
           duration: Duration(seconds: 2),
         ),
       );
-    } else {
-      posts.unsavePost(auth.uid, widget.post.postId);
     }
   }
 

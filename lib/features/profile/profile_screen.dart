@@ -65,8 +65,29 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (picked == null || !mounted) return;
       final auth = context.read<AuthProvider>();
       final userProvider = context.read<UserProvider>();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Uploading photo...'), duration: Duration(seconds: 60)),
+        );
+      }
       await userProvider.updateAvatar(auth.uid, File(picked.path));
-    } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile photo updated!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload photo: ${e.toString().replaceFirst("Exception: ", "")}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -79,8 +100,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
 
-    final progress = (user.karma / 1000).clamp(0.0, 1.0);
-    final remaining = (1000 - user.karma).clamp(0, 1000);
+    final progress = (user.karma / 100).clamp(0.0, 1.0);
+    final remaining = (100 - user.karma).clamp(0, 100);
 
     return Scaffold(
       appBar: AppBar(
@@ -394,7 +415,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 color: null,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13)),
-                        Text('Reach 1000 karma to unlock unlimited saves',
+                        Text('Reach 100 karma to unlock unlimited saves',
                             style:
                                 TextStyle(color: kMutedFg, fontSize: 12)),
                       ],

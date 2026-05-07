@@ -18,6 +18,7 @@ import 'features/map/map_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/search/search_screen.dart';
+import 'features/faq/faq_screen.dart';
 import 'features/saved/saved_posts_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'firebase_options.dart';
@@ -154,6 +155,10 @@ class _AppRouterState extends State<_AppRouter> {
         GoRoute(
           path: '/settings',
           builder: (_, __) => const SettingsScreen(),
+        ),
+        GoRoute(
+          path: '/faq',
+          builder: (_, __) => const FaqScreen(),
         ),
       ],
       errorBuilder: (_, state) => Scaffold(

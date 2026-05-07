@@ -145,14 +145,45 @@ class PostsRepo {
       'upvotedBy': FieldValue.arrayUnion([voterName]),
     });
     await _userRepo.addKarma(authorId, 2);
-    await _createNotification(NotificationModel(
-      notifId: '',
-      userId: authorId,
-      type: 'upvote',
-      title: '$voterName upvoted your post',
-      body: '$voterName just upvoted your post!',
-      postId: postId,
-    ));
+    // Don't notify when the post owner upvotes their own post
+    if (voterId != authorId) {
+      await _createNotification(NotificationModel(
+        notifId: '',
+        userId: authorId,
+        type: 'upvote',
+        title: '$voterName upvoted your post',
+        body: '$voterName just upvoted your post!',
+        postId: postId,
+      ));
+    }
+  }
+
+  Future<void> updateUserAvatarOnPosts(String userId, String avatarUrl) async {
+    final snap = await _db
+        .collection('posts')
+        .where('userId', isEqualTo: userId)
+        .get();
+    if (snap.docs.isEmpty) return;
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {'userAvatarUrl': avatarUrl});
+    }
+    await batch.commit();
+  }
+
+  Future<void> deletePost(String postId) async {
+    // Delete all comments first
+    final comments = await _db
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .get();
+    final batch = _db.batch();
+    for (final doc in comments.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(_db.collection('posts').doc(postId));
+    await batch.commit();
   }
 
   Future<void> downvotePost(String postId) async {
@@ -229,6 +260,20 @@ class PostsRepo {
         .doc(comment.postId)
         .update({'commentCount': FieldValue.increment(1)});
     await _userRepo.addKarma(comment.userId, 1);
+  }
+
+  Future<void> toggleCommentLike(
+      String postId, String commentId, String userId, bool add) async {
+    await _db
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .doc(commentId)
+        .update({
+      'likedBy': add
+          ? FieldValue.arrayUnion([userId])
+          : FieldValue.arrayRemove([userId]),
+    });
   }
 
   Future<void> editComment(

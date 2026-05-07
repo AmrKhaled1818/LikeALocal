@@ -28,8 +28,8 @@ class UserRepo {
       if (!snap.exists) return;
       final current = snap.data()!;
       final newKarma = (current['karma'] ?? 0) + amount;
-      final newScore = (newKarma / 1000 * 100).clamp(0.0, 100.0);
-      final isSuperUser = newKarma >= 1000;
+      final newScore = (newKarma.toDouble()).clamp(0.0, 100.0);
+      final isSuperUser = newKarma >= 100;
       tx.update(ref, {
         'karma': newKarma,
         'contributionScore': newScore,

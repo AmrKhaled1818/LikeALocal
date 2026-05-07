@@ -51,15 +51,10 @@ lib/firebase_options.dart
 # Claude Code local settings
 .claude/
 
+# README
+CLAUDE.md
+
 # Firebase CLI generated scripts
 firebase.cmd
 flutterfire.cmd
 
-# Seed / dev scripts (contain credentials)
-seed_data.py
-
-# Design prototype (React/web — not part of Flutter app)
-LikeALocal app design/
-
-# Project planning docs
-project_docs/

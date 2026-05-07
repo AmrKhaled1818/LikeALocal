@@ -36,6 +36,7 @@ class _MapScreenState extends State<MapScreen> {
 
   bool _darkMap = false;
   bool _focusListenerAdded = false;
+  bool _showSuggestions = false;
 
   static const _cairoCenter = LatLng(30.0444, 31.2357);
   static const _defaultZoom = 15.0;
@@ -45,15 +46,34 @@ class _MapScreenState extends State<MapScreen> {
   static const _darkTileUrl =
       'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key={api_key}';
 
-  static const _categories = ['All', 'Food', 'Cafes', 'Parks', 'Art', 'Shopping'];
+  static const _categories = ['All', 'Restaurant', 'Bar', 'Café', 'Park', 'Viewpoint', 'Shop'];
 
   static const _categoryMap = {
-    'Food': ['Restaurant', 'Bar'],
-    'Cafes': ['Café', 'Cafe'],
-    'Parks': ['Park'],
-    'Art': ['Viewpoint'],
-    'Shopping': ['Shop'],
+    'Restaurant': ['Restaurant'],
+    'Bar': ['Bar'],
+    'Café': ['Café', 'Cafe'],
+    'Park': ['Park'],
+    'Viewpoint': ['Viewpoint'],
+    'Shop': ['Shop'],
   };
+
+  List<PostModel> _getSuggestions(List<PostModel> allPosts) {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isEmpty) return [];
+    return allPosts
+        .where((p) =>
+            p.title.toLowerCase().startsWith(q) ||
+            p.location.toLowerCase().startsWith(q) ||
+            p.title.toLowerCase().contains(q) ||
+            p.location.toLowerCase().contains(q))
+        .take(6)
+        .toList()
+      ..sort((a, b) {
+        final aStarts = a.title.toLowerCase().startsWith(q) ? 0 : 1;
+        final bStarts = b.title.toLowerCase().startsWith(q) ? 0 : 1;
+        return aStarts.compareTo(bStarts);
+      });
+  }
 
   @override
   void initState() {
@@ -582,7 +602,10 @@ class _MapScreenState extends State<MapScreen> {
               options: MapOptions(
                 initialCenter: _cairoCenter,
                 initialZoom: _defaultZoom,
-                onTap: (_, __) => setState(() => _selectedPost = null),
+                onTap: (_, __) => setState(() {
+                  _selectedPost = null;
+                  _showSuggestions = false;
+                }),
                 onPositionChanged: (_, hasGesture) {
                   // User dragged the map — stop auto-following
                   if (hasGesture && _following) {
@@ -593,6 +616,7 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 TileLayer(
                   urlTemplate: _darkMap ? _darkTileUrl : _lightTileUrl,
+                  fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   additionalOptions: const {'api_key': AppConfig.stadiaApiKey},
                   userAgentPackageName: 'com.example.like_a_local',
                   maxZoom: 20,
@@ -641,34 +665,121 @@ class _MapScreenState extends State<MapScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
+                          child: Column(
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: TextField(
-                              controller: _searchCtrl,
-                              onChanged: (_) => setState(() {}),
-                              decoration: const InputDecoration(
-                                hintText: 'Search places...',
-                                prefixIcon:
-                                    Icon(Icons.search_outlined, color: kMutedFg),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 12),
-                                fillColor: Colors.transparent,
-                                filled: true,
+                                child: TextField(
+                                  controller: _searchCtrl,
+                                  onChanged: (_) => setState(() => _showSuggestions = _searchCtrl.text.isNotEmpty),
+                                  onTap: () => setState(() => _showSuggestions = _searchCtrl.text.isNotEmpty),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search places...',
+                                    prefixIcon: const Icon(Icons.search_outlined, color: kMutedFg),
+                                    suffixIcon: _searchCtrl.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(Icons.close, color: kMutedFg, size: 18),
+                                            onPressed: () => setState(() {
+                                              _searchCtrl.clear();
+                                              _showSuggestions = false;
+                                            }),
+                                          )
+                                        : null,
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    fillColor: Colors.transparent,
+                                    filled: true,
+                                  ),
+                                ),
                               ),
-                            ),
+                              // Autocomplete suggestions dropdown
+                              if (_showSuggestions)
+                                Consumer<PostsProvider>(
+                                  builder: (_, postsP, __) {
+                                    final suggestions = _getSuggestions(postsP.feedPosts);
+                                    if (suggestions.isEmpty) return const SizedBox.shrink();
+                                    return Container(
+                                      margin: const EdgeInsets.only(top: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.12),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: suggestions.map((post) {
+                                          return InkWell(
+                                            onTap: () {
+                                              _searchCtrl.text = post.title;
+                                              setState(() => _showSuggestions = false);
+                                              if (post.lat != 0) {
+                                                _mapController.move(LatLng(post.lat, post.lng), 16.0);
+                                                setState(() => _selectedPost = post);
+                                              }
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.place, color: kOrange, size: 16),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          post.title,
+                                                          style: const TextStyle(
+                                                              fontWeight: FontWeight.w600,
+                                                              fontSize: 13,
+                                                              color: null),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                        Text(
+                                                          post.location,
+                                                          style: const TextStyle(
+                                                              color: kMutedFg, fontSize: 11),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    post.category,
+                                                    style: const TextStyle(color: kMutedFg, fontSize: 11),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1063,14 +1174,31 @@ class _PostBottomSheet extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     final auth = context.read<AuthProvider>();
-                    context.read<PostsProvider>().savePost(auth.uid, post.postId);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Pinned!'),
-                          duration: Duration(seconds: 2)),
-                    );
+                    final posts = context.read<PostsProvider>();
+                    final isSuperUser = auth.userModel?.isSuperUser ?? false;
+                    if (!isSuperUser) {
+                      final saved = await posts.getSavedPosts(auth.uid);
+                      if (!context.mounted) return;
+                      if (saved.length >= 5) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Save limit reached (5/5). Earn 100 karma to unlock unlimited saves.'),
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                        return;
+                      }
+                    }
+                    await posts.savePost(auth.uid, post.postId);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Pinned!'),
+                            duration: Duration(seconds: 2)),
+                      );
+                    }
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: kDark,

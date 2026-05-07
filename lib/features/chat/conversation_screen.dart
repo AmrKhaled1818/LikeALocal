@@ -486,7 +486,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     ),
                     const SizedBox(height: 2),
                     const Text(
-                      'Resets tomorrow · Earn 1000 karma for unlimited',
+                      'Resets tomorrow · Earn 100 karma for unlimited',
                       style: TextStyle(color: kMutedFg, fontSize: 11),
                       textAlign: TextAlign.center,
                     ),

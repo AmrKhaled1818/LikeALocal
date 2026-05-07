@@ -255,6 +255,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
                                 TileLayer(
                                   urlTemplate:
                                       'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}',
+                                  fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                                   additionalOptions: const {
                                     'api_key': AppConfig.stadiaApiKey
                                   },
@@ -392,7 +393,28 @@ class _EditPostScreenState extends State<EditPostScreen> {
         imageQuality: 72,
       );
       if (picked == null) return;
-      setState(() => _newImage = File(picked.path));
+      final file = File(picked.path);
+      final bytes = await file.length();
+      if (bytes > 4 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image too large. Choose a smaller photo.'),
+              backgroundColor: kDestructive,
+            ),
+          );
+        }
+        return;
+      }
+      setState(() => _newImage = file);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo selected (${(bytes / 1024).round()}KB) — tap Save to upload.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

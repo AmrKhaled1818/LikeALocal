@@ -13,9 +13,9 @@ class SidebarMenu extends StatelessWidget {
       builder: (context, auth, _) {
         final user = auth.userModel;
         final karma = user?.karma ?? 0;
-        final score = user?.contributionScore ?? 0.0;
+        final score = (karma / 100 * 100).clamp(0.0, 100.0);
         final isSuperUser = user?.isSuperUser ?? false;
-        final remaining = (1000 - karma).clamp(0, 1000);
+        final remaining = (100 - karma).clamp(0, 100);
 
         return Drawer(
           child: SafeArea(
@@ -132,6 +132,12 @@ class SidebarMenu extends StatelessWidget {
                   icon: Icons.settings_outlined,
                   label: 'Settings',
                   route: '/settings',
+                ),
+                _menuItem(
+                  context,
+                  icon: Icons.help_outline,
+                  label: 'Help & FAQ',
+                  route: '/faq',
                 ),
                 const Spacer(),
                 Padding(

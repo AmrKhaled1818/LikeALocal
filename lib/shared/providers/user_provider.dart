@@ -1,8 +1,9 @@
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/models/user_model.dart';
+import '../../data/repositories/posts_repo.dart';
 import '../../data/repositories/user_repo.dart';
+import '../../data/services/cloudinary_service.dart';
 
 class UserProvider extends ChangeNotifier {
   final UserRepo _repo = UserRepo();
@@ -39,13 +40,10 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<void> updateAvatar(String uid, File imageFile) async {
-    try {
-      final ref = FirebaseStorage.instance
-          .ref('avatars/$uid.jpg');
-      await ref.putFile(imageFile);
-      final url = await ref.getDownloadURL();
-      await _repo.updateUser(uid, {'avatarUrl': url});
-    } catch (_) {}
+    final cloudinary = CloudinaryService();
+    final result = await cloudinary.uploadAvatar(imageFile);
+    await _repo.updateUser(uid, {'avatarUrl': result.imageUrl});
+    await PostsRepo().updateUserAvatarOnPosts(uid, result.imageUrl);
   }
 
   Future<void> updateChatEnabled(bool enabled) async {

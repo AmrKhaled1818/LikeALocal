@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
@@ -58,24 +59,23 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<void> _checkDailyLimit() async {
     final auth = context.read<AuthProvider>();
     if (auth.uid.isEmpty) return;
-    // Count posts made today by this user
-    final today = DateTime.now();
-    final startOfDay = Timestamp.fromDate(
-        DateTime(today.year, today.month, today.day));
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('posts')
-          .where('userId', isEqualTo: auth.uid)
-          .where('createdAt', isGreaterThanOrEqualTo: startOfDay)
-          .get();
-      if (mounted) {
-        setState(() {
-          _todayPostCount = snap.docs.length;
-          _checkingLimit = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _checkingLimit = false);
+    final prefs = await SharedPreferences.getInstance();
+    final uid = auth.uid;
+    final resetTime = prefs.getInt('post_reset_$uid') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    int count;
+    if (now - resetTime >= 24 * 60 * 60 * 1000) {
+      count = 0;
+      await prefs.setInt('post_count_$uid', 0);
+      await prefs.setInt('post_reset_$uid', now);
+    } else {
+      count = prefs.getInt('post_count_$uid') ?? 0;
+    }
+    if (mounted) {
+      setState(() {
+        _todayPostCount = count;
+        _checkingLimit = false;
+      });
     }
   }
 
@@ -281,6 +281,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                 TileLayer(
                                   urlTemplate:
                                       'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}',
+                                  fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                                   additionalOptions: const {
                                     'api_key': AppConfig.stadiaApiKey
                                   },
@@ -470,7 +471,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                               color: kDestructive)),
-                      Text('Earn 1000 karma to unlock unlimited posting',
+                      Text('Earn 100 karma to unlock unlimited posting',
                           style: TextStyle(color: kMutedFg, fontSize: 12)),
                     ],
                   )
@@ -572,9 +573,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       );
 
       if (id != null && mounted) {
+        // Increment local post counter for daily limit
+        final prefs = await SharedPreferences.getInstance();
+        final uid = auth.uid;
+        final newCount = (prefs.getInt('post_count_$uid') ?? 0) + 1;
+        await prefs.setInt('post_count_$uid', newCount);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Post shared! Karma +10 🎉'),
+              content: Text('Post shared! Karma +10'),
               backgroundColor: Colors.green),
         );
         context.go('/feed');
@@ -656,6 +662,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               TileLayer(
                 urlTemplate:
                     'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}',
+                fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 additionalOptions: const {'api_key': AppConfig.stadiaApiKey},
                 userAgentPackageName: 'com.example.like_a_local',
               ),

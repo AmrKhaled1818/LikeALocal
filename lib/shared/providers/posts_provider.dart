@@ -130,6 +130,19 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deletePost(String postId) async {
+    try {
+      await _repo.deletePost(postId);
+      _feedPosts.removeWhere((p) => p.postId == postId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> downvotePost(String postId) async {
     try {
       await _repo.downvotePost(postId);
