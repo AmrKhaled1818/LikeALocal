@@ -25,6 +25,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
+  bool _mapReady = false; // guard: don't call move() before first frame
   Position? _currentPosition;
   StreamSubscription<Position>? _locationSub;
   bool _following = false;
@@ -32,7 +33,7 @@ class _MapScreenState extends State<MapScreen> {
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   PostModel? _selectedPost;
-  double? _maxDistanceKm; // F30 — null means no filter
+  double? _maxDistanceKm;
 
   bool _darkMap = false;
   bool _focusListenerAdded = false;
@@ -41,8 +42,10 @@ class _MapScreenState extends State<MapScreen> {
   static const _cairoCenter = LatLng(30.0444, 31.2357);
   static const _defaultZoom = 15.0;
 
+  // OSM as primary — free, no API key, works on every device/network.
+  // Stadia dark used for dark mode (falls back to OSM if key fails).
   static const _lightTileUrl =
-      'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}';
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   static const _darkTileUrl =
       'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key={api_key}';
 
@@ -127,7 +130,7 @@ class _MapScreenState extends State<MapScreen> {
     final post = posts.getPostById(postId);
     if (post != null && post.lat != 0) {
       setState(() => _selectedPost = post);
-      _mapController.move(LatLng(post.lat, post.lng), 16.0);
+      if (_mapReady) _mapController.move(LatLng(post.lat, post.lng), 16.0);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -200,7 +203,9 @@ class _MapScreenState extends State<MapScreen> {
         _following = true;
         _startingLocation = false;
       });
-      _mapController.move(LatLng(pos.latitude, pos.longitude), _defaultZoom);
+      if (_mapReady) {
+        _mapController.move(LatLng(pos.latitude, pos.longitude), _defaultZoom);
+      }
     } catch (_) {
       if (mounted) {
         _showSnack('Could not get location.');
@@ -218,8 +223,9 @@ class _MapScreenState extends State<MapScreen> {
     ).listen((pos) {
       if (!mounted) return;
       setState(() => _currentPosition = pos);
-      if (_following) {
-        _mapController.move(LatLng(pos.latitude, pos.longitude), _mapController.camera.zoom);
+      if (_following && _mapReady) {
+        _mapController.move(
+            LatLng(pos.latitude, pos.longitude), _mapController.camera.zoom);
       }
     }, onError: (_) {});
   }
@@ -230,11 +236,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _zoomIn() {
+    if (!_mapReady) return;
     final c = _mapController.camera;
     _mapController.move(c.center, c.zoom + 1);
   }
 
   void _zoomOut() {
+    if (!_mapReady) return;
     final c = _mapController.camera;
     _mapController.move(c.center, c.zoom - 1);
   }
@@ -473,8 +481,10 @@ class _MapScreenState extends State<MapScreen> {
                             onPressed: () {
                               Navigator.pop(ctx);
                               setState(() => _selectedPost = post);
-                              _mapController.move(
-                                  LatLng(post.lat, post.lng), 16.0);
+                              if (_mapReady) {
+                                _mapController.move(
+                                    LatLng(post.lat, post.lng), 16.0);
+                              }
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: kOrange,
@@ -602,22 +612,26 @@ class _MapScreenState extends State<MapScreen> {
               options: MapOptions(
                 initialCenter: _cairoCenter,
                 initialZoom: _defaultZoom,
+                onMapReady: () => setState(() => _mapReady = true),
                 onTap: (_, __) => setState(() {
                   _selectedPost = null;
                   _showSuggestions = false;
                 }),
                 onPositionChanged: (_, hasGesture) {
-                  // User dragged the map — stop auto-following
                   if (hasGesture && _following) {
                     setState(() => _following = false);
                   }
                 },
               ),
               children: [
+                // Light: OSM (free, no key, works everywhere).
+                // Dark: Stadia with OSM fallback.
                 TileLayer(
                   urlTemplate: _darkMap ? _darkTileUrl : _lightTileUrl,
                   fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  additionalOptions: const {'api_key': AppConfig.stadiaApiKey},
+                  additionalOptions: _darkMap
+                      ? const {'api_key': AppConfig.stadiaApiKey}
+                      : const {},
                   userAgentPackageName: 'com.example.like_a_local',
                   maxZoom: 20,
                 ),
@@ -731,10 +745,13 @@ class _MapScreenState extends State<MapScreen> {
                                           return InkWell(
                                             onTap: () {
                                               _searchCtrl.text = post.title;
-                                              setState(() => _showSuggestions = false);
-                                              if (post.lat != 0) {
-                                                _mapController.move(LatLng(post.lat, post.lng), 16.0);
-                                                setState(() => _selectedPost = post);
+                                              setState(() {
+                                                _showSuggestions = false;
+                                                if (post.lat != 0) _selectedPost = post;
+                                              });
+                                              if (post.lat != 0 && _mapReady) {
+                                                _mapController.move(
+                                                    LatLng(post.lat, post.lng), 16.0);
                                               }
                                             },
                                             child: Padding(
@@ -1102,38 +1119,27 @@ class _PostBottomSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Always render a fixed-height container so the close button
+          // (Positioned) always has a sized parent to anchor to.
           Stack(
             children: [
-              if (post.imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: CachedNetworkImage(
-                    imageUrl: post.imageUrl,
-                    width: double.infinity,
-                    height: 150,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
-                      width: double.infinity,
-                      height: 150,
-                      color: const Color(0xFFF3F4F6),
-                      child: const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.image_not_supported_outlined, color: kMutedFg, size: 32),
-                            SizedBox(height: 8),
-                            Text('No image found or link broken', style: TextStyle(color: kMutedFg, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: post.imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: post.imageUrl,
+                        width: double.infinity,
+                        height: 150,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _NoImagePlaceholder(),
+                      )
+                    : _NoImagePlaceholder(),
+              ),
               Positioned(
                 top: 8,
                 right: 8,
                 child: CircleAvatar(
-                  backgroundColor: Colors.white.withValues(alpha: 0.8),
+                  backgroundColor: Colors.white.withValues(alpha: 0.85),
                   radius: 16,
                   child: IconButton(
                     padding: EdgeInsets.zero,
@@ -1251,6 +1257,19 @@ class _PostBottomSheet extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _NoImagePlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 150,
+      color: kMuted,
+      child: const Icon(Icons.image_not_supported_outlined,
+          size: 40, color: kMutedFg),
     );
   }
 }

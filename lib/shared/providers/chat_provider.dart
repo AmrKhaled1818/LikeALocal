@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../data/models/message_model.dart';
 import '../../data/repositories/chat_repo.dart';
@@ -7,12 +8,18 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatModel> _chats = [];
   bool _isLoading = false;
+  String? _listeningUid;
+  StreamSubscription? _chatsSub;
 
   List<ChatModel> get chats => _chats;
   bool get isLoading => _isLoading;
 
   void startListening(String userId) {
-    _repo.getUserChats(userId).listen(
+    // Don't create a duplicate subscription for the same user
+    if (_listeningUid == userId) return;
+    _chatsSub?.cancel();
+    _listeningUid = userId;
+    _chatsSub = _repo.getUserChats(userId).listen(
       (chats) {
         _chats = chats;
         notifyListeners();
@@ -21,6 +28,14 @@ class ChatProvider extends ChangeNotifier {
         debugPrint('ChatProvider error: $e');
       },
     );
+  }
+
+  void stopListening() {
+    _chatsSub?.cancel();
+    _chatsSub = null;
+    _listeningUid = null;
+    _chats = [];
+    notifyListeners();
   }
 
   Stream<List<MessageModel>> getMessages(String chatId) {
@@ -65,5 +80,11 @@ class ChatProvider extends ChangeNotifier {
       total += chat.unreadCount[userId] ?? 0;
     }
     return total;
+  }
+
+  @override
+  void dispose() {
+    _chatsSub?.cancel();
+    super.dispose();
   }
 }

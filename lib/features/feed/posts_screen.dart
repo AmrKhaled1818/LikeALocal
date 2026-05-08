@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -54,10 +55,20 @@ class _PostsScreenState extends State<PostsScreen> {
           onRefresh: () async {
             HapticFeedback.lightImpact();
             posts.refresh();
-            // Wait for loading to complete
-            await Future.doWhile(
-                () => Future.delayed(const Duration(milliseconds: 100))
-                    .then((_) => posts.isLoading));
+            // Use a Completer instead of a polling loop
+            final completer = Completer<void>();
+            void check() {
+              if (!posts.isLoading) {
+                posts.removeListener(check);
+                if (!completer.isCompleted) completer.complete();
+              }
+            }
+            posts.addListener(check);
+            // Safety timeout
+            Future.delayed(const Duration(seconds: 15), () {
+              if (!completer.isCompleted) completer.complete();
+            });
+            return completer.future;
           },
           child: CustomScrollView(
             controller: _scrollCtrl,

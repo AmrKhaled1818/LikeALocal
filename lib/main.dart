@@ -102,32 +102,42 @@ class _AppRouterState extends State<_AppRouter> {
           path: '/login',
           builder: (_, __) => const LoginScreen(),
         ),
-        ShellRoute(
-          builder: (context, state, child) =>
-              _MainShell(location: state.matchedLocation, child: child),
-          routes: [
-            GoRoute(
-              path: '/feed',
-              builder: (_, __) => const PostsScreen(),
-            ),
-            GoRoute(
-              path: '/map',
-              builder: (_, state) => MapScreen(
-                focusPostId: state.uri.queryParameters['focusPostId'],
+        StatefulShellRoute.indexedStack(
+          builder: (context, state, navigationShell) =>
+              _MainShell(navigationShell: navigationShell),
+          branches: [
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: '/feed',
+                builder: (_, __) => const PostsScreen(),
               ),
-            ),
-            GoRoute(
-              path: '/create',
-              builder: (_, __) => const CreatePostScreen(),
-            ),
-            GoRoute(
-              path: '/chat',
-              builder: (_, __) => const ChatScreen(),
-            ),
-            GoRoute(
-              path: '/search',
-              builder: (_, __) => const SearchScreen(),
-            ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: '/map',
+                builder: (_, state) => MapScreen(
+                  focusPostId: state.uri.queryParameters['focusPostId'],
+                ),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: '/create',
+                builder: (_, __) => const CreatePostScreen(),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: '/chat',
+                builder: (_, __) => const ChatScreen(),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: '/search',
+                builder: (_, __) => const SearchScreen(),
+              ),
+            ]),
           ],
         ),
         GoRoute(
@@ -182,10 +192,9 @@ class _AppRouterState extends State<_AppRouter> {
 }
 
 class _MainShell extends StatefulWidget {
-  final String location;
-  final Widget child;
+  final StatefulNavigationShell navigationShell;
 
-  const _MainShell({required this.location, required this.child});
+  const _MainShell({required this.navigationShell});
 
   @override
   State<_MainShell> createState() => _MainShellState();
@@ -193,40 +202,12 @@ class _MainShell extends StatefulWidget {
 
 class _MainShellState extends State<_MainShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  int _prevIndex = 0;
-
-  static int _indexFor(String loc) {
-    switch (loc) {
-      case '/feed':
-        return 0;
-      case '/map':
-        return 1;
-      case '/create':
-        return 2;
-      case '/chat':
-        return 3;
-      case '/search':
-        return 4;
-      default:
-        return 0;
-    }
-  }
-
-  int get _navIndex => _indexFor(widget.location);
-
-  @override
-  void didUpdateWidget(_MainShell old) {
-    super.didUpdateWidget(old);
-    if (old.location != widget.location) {
-      _prevIndex = _indexFor(old.location);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final connectivity = context.watch<ConnectivityProvider>();
-    final isCreate = widget.location == '/create';
-    final goingRight = _navIndex > _prevIndex;
+    final navShell = widget.navigationShell;
+    final isCreate = navShell.currentIndex == 2;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -235,33 +216,16 @@ class _MainShellState extends State<_MainShell> {
       body: Column(
         children: [
           if (!connectivity.isOnline) const _OfflineBanner(),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 120),
-              transitionBuilder: (child, animation) {
-                final offset = goingRight
-                    ? const Offset(1.0, 0.0)
-                    : const Offset(-1.0, 0.0);
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: offset,
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                  )),
-                  child: child,
-                );
-              },
-              child: KeyedSubtree(
-                key: ValueKey(widget.location),
-                child: widget.child,
-              ),
-            ),
-          ),
+          Expanded(child: navShell),
         ],
       ),
-      bottomNavigationBar: AppBottomNav(currentIndex: _navIndex),
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: navShell.currentIndex,
+        onTap: (i) => navShell.goBranch(
+          i,
+          initialLocation: i == navShell.currentIndex,
+        ),
+      ),
     );
   }
 }

@@ -7,13 +7,11 @@ import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
 import '../../data/models/post_model.dart';
+import '../../data/models/comment_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
-import '../../data/repositories/posts_repo.dart';
-import '../../data/models/comment_model.dart';
 import 'super_user_badge.dart';
 
-// F17 — Category color map
 const _categoryColors = {
   'restaurant': kOrange,
   'bar': Color(0xFF7C3AED),
@@ -41,7 +39,6 @@ class _PostCardState extends State<PostCard>
   bool _isSaved = false;
   int? _userVote; // 1 = up, -1 = down, null = none
 
-  // F15 — heart animation
   late final AnimationController _heartCtrl;
   late final Animation<double> _heartFade;
   late final Animation<double> _heartScale;
@@ -54,7 +51,7 @@ class _PostCardState extends State<PostCard>
   @override
   void initState() {
     super.initState();
-    _checkSaved();
+
     _heartCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 800));
     _heartFade = Tween<double>(begin: 1.0, end: 0.0).animate(
@@ -71,6 +68,46 @@ class _PostCardState extends State<PostCard>
         if (mounted) setState(() => _showHeart = false);
       }
     });
+
+    // Initialise vote state from post data (prevents reset on rebuild)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      final username = auth.userModel?.username ?? '';
+      if (username.isNotEmpty) {
+        final voted = widget.post.upvotedBy.contains(username);
+        if (voted) setState(() => _userVote = 1);
+      }
+
+      // Use local saved-IDs cache — no Firestore read per card
+      final postsProvider = context.read<PostsProvider>();
+      if (postsProvider.savedIdsLoaded) {
+        setState(() =>
+            _isSaved = postsProvider.isPostSavedLocally(widget.post.postId));
+      } else if (auth.uid.isNotEmpty) {
+        postsProvider.loadSavedIds(auth.uid).then((_) {
+          if (mounted) {
+            setState(() => _isSaved =
+                postsProvider.isPostSavedLocally(widget.post.postId));
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(PostCard old) {
+    super.didUpdateWidget(old);
+    // Keep vote state in sync if the post data changes from provider
+    if (old.post.upvotedBy != widget.post.upvotedBy) {
+      final auth = context.read<AuthProvider>();
+      final username = auth.userModel?.username ?? '';
+      if (username.isNotEmpty) {
+        final voted = widget.post.upvotedBy.contains(username);
+        if (voted && _userVote != 1) setState(() => _userVote = 1);
+        if (!voted && _userVote == 1) setState(() => _userVote = null);
+      }
+    }
   }
 
   @override
@@ -78,15 +115,6 @@ class _PostCardState extends State<PostCard>
     _heartCtrl.dispose();
     _commentCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkSaved() async {
-    final auth = context.read<AuthProvider>();
-    if (auth.uid.isEmpty) return;
-    final saved = await context
-        .read<PostsProvider>()
-        .isPostSaved(auth.uid, widget.post.postId);
-    if (mounted) setState(() => _isSaved = saved);
   }
 
   int get _score => widget.post.upvotes - widget.post.downvotes;
@@ -162,7 +190,9 @@ class _PostCardState extends State<PostCard>
                                 Text(
                                   post.username,
                                   style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurface,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13),
                                 ),
@@ -190,7 +220,6 @@ class _PostCardState extends State<PostCard>
                           ],
                         ),
                       ),
-                      // F17 — Category color chip
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
@@ -219,7 +248,8 @@ class _PostCardState extends State<PostCard>
                       Text(
                         post.title,
                         style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
+                            color:
+                                Theme.of(context).colorScheme.onSurface,
                             fontWeight: FontWeight.bold,
                             fontSize: 15),
                       ),
@@ -246,11 +276,15 @@ class _PostCardState extends State<PostCard>
                       fit: BoxFit.cover,
                       placeholder: (_, __) => Container(
                         height: 200,
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                       ),
                       errorWidget: (_, __, ___) => Container(
                         height: 200,
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         child: const Icon(Icons.image_outlined,
                             color: kMutedFg),
                       ),
@@ -262,10 +296,11 @@ class _PostCardState extends State<PostCard>
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                   child: Row(
                     children: [
-                      // Vote controls
                       Container(
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -275,8 +310,7 @@ class _PostCardState extends State<PostCard>
                               icon: Icon(
                                 Icons.arrow_upward,
                                 size: 18,
-                                color:
-                                    _userVote == 1 ? kOrange : kMutedFg,
+                                color: _userVote == 1 ? kOrange : kMutedFg,
                               ),
                               onPressed: () => _handleVote(1),
                               padding: const EdgeInsets.symmetric(
@@ -284,11 +318,7 @@ class _PostCardState extends State<PostCard>
                               constraints: const BoxConstraints(),
                             ),
                             Text(
-                              _userVote == 1
-                                  ? '+${_score + 1}'
-                                  : _userVote == -1
-                                      ? '+${_score - 1}'
-                                      : '+$_score',
+                              '+$_score',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -316,7 +346,6 @@ class _PostCardState extends State<PostCard>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Comment count
                       Row(
                         children: [
                           const Icon(Icons.mode_comment_outlined,
@@ -328,7 +357,6 @@ class _PostCardState extends State<PostCard>
                         ],
                       ),
                       const Spacer(),
-                      // Bookmark
                       IconButton(
                         icon: Icon(
                           _isSaved
@@ -342,7 +370,6 @@ class _PostCardState extends State<PostCard>
                         constraints: const BoxConstraints(),
                       ),
                       const SizedBox(width: 8),
-                      // F11 — Share post
                       IconButton(
                         icon: const Icon(Icons.share_outlined,
                             color: kMutedFg, size: 20),
@@ -367,74 +394,36 @@ class _PostCardState extends State<PostCard>
                     child: Text(
                       'Upvoted by ${post.upvotedBy.join(', ')}',
                       style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: 12, fontWeight: FontWeight.w600),
+                          color:
+                              Theme.of(context).colorScheme.onSurface,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 if (post.upvotedBy.isNotEmpty) const SizedBox(height: 4),
 
-                // View all comments link
-                if (post.commentCount > 2)
+                // "View all comments" link — no inline stream
+                if (post.commentCount > 0)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: GestureDetector(
                       onTap: () => context.push('/post/${post.postId}'),
                       child: Text(
-                        'View all ${post.commentCount} comments',
-                        style: const TextStyle(color: kMutedFg, fontSize: 13),
+                        post.commentCount > 1
+                            ? 'View all ${post.commentCount} comments'
+                            : 'View 1 comment',
+                        style:
+                            const TextStyle(color: kMutedFg, fontSize: 13),
                       ),
                     ),
                   ),
 
-                // Inline comments Stream
-                if (post.commentCount > 0)
-                  StreamBuilder<List<CommentModel>>(
-                    stream: PostsRepo().getComments(post.postId),
-                    builder: (context, snap) {
-                      if (!snap.hasData || snap.data!.isEmpty) {
-                        return const SizedBox.shrink();
-                      }
-                      final comments = snap.data!;
-                      final recent = comments.length > 2
-                          ? comments.sublist(comments.length - 2)
-                          : comments;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        child: Column(
-                          children: recent.map((c) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  c.username,
-                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    c.content,
-                                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  timeago.format(c.createdAt.toDate()),
-                                  style: const TextStyle(color: kMutedFg, fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          )).toList(),
-                        ),
-                      );
-                    },
-                  ),
-
-                // Add a comment input
+                // Inline comment input
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
                       Consumer<AuthProvider>(
@@ -444,10 +433,14 @@ class _PostCardState extends State<PostCard>
                           return CircleAvatar(
                             radius: 12,
                             backgroundColor: kOrange,
-                            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                            backgroundImage: avatar.isNotEmpty
+                                ? NetworkImage(avatar)
+                                : null,
                             child: avatar.isEmpty
-                                ? Text(name.substring(0, 1).toUpperCase(),
-                                    style: const TextStyle(color: Colors.white, fontSize: 10))
+                                ? Text(
+                                    name.substring(0, 1).toUpperCase(),
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 10))
                                 : null,
                           );
                         },
@@ -456,10 +449,14 @@ class _PostCardState extends State<PostCard>
                       Expanded(
                         child: TextField(
                           controller: _commentCtrl,
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
+                          style: TextStyle(
+                              color:
+                                  Theme.of(context).colorScheme.onSurface,
+                              fontSize: 13),
                           decoration: const InputDecoration(
                             hintText: 'Add a comment...',
-                            hintStyle: TextStyle(color: kMutedFg, fontSize: 13),
+                            hintStyle:
+                                TextStyle(color: kMutedFg, fontSize: 13),
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
@@ -471,7 +468,8 @@ class _PostCardState extends State<PostCard>
                         const SizedBox(
                           width: 14,
                           height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: kOrange),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: kOrange),
                         ),
                     ],
                   ),
@@ -481,7 +479,7 @@ class _PostCardState extends State<PostCard>
             ),
           ),
 
-          // F15 — Double-tap heart overlay
+          // Double-tap heart overlay
           if (_showHeart)
             Positioned.fill(
               child: IgnorePointer(
@@ -515,16 +513,20 @@ class _PostCardState extends State<PostCard>
 
     if (_userVote == vote) {
       setState(() => _userVote = null);
-    } else {
-      HapticFeedback.mediumImpact();
-      if (vote == 1) {
-        posts.upvotePost(
-            widget.post.postId, auth.uid, widget.post.userId, auth.userModel?.username ?? 'User');
-      } else {
-        posts.downvotePost(widget.post.postId);
-      }
-      setState(() => _userVote = vote);
+      return; // un-vote — local state only, no Firestore call
     }
+
+    HapticFeedback.mediumImpact();
+    if (vote == 1) {
+      posts.upvotePost(
+          widget.post.postId,
+          auth.uid,
+          widget.post.userId,
+          auth.userModel?.username ?? 'User');
+    } else {
+      posts.downvotePost(widget.post.postId);
+    }
+    setState(() => _userVote = vote);
   }
 
   Future<void> _handleSave() async {
@@ -535,21 +537,21 @@ class _PostCardState extends State<PostCard>
     HapticFeedback.lightImpact();
 
     if (_isSaved) {
-      // Unsave — always allowed
       setState(() => _isSaved = false);
       await posts.unsavePost(auth.uid, widget.post.postId);
       return;
     }
 
-    // Check save limit for free users
     final isSuperUser = auth.userModel?.isSuperUser ?? false;
     if (!isSuperUser) {
+      // Use the local cache count to check the limit
       final savedPosts = await posts.getSavedPosts(auth.uid);
       if (!mounted) return;
       if (savedPosts.length >= 5) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Save limit reached (5/5). Unsave a post or earn 100 karma to unlock unlimited saves.'),
+            content: Text(
+                'Save limit reached (5/5). Unsave a post or earn 100 karma to unlock unlimited saves.'),
             duration: Duration(seconds: 3),
           ),
         );

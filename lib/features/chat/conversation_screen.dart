@@ -33,6 +33,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
   int _todayAiCount = 0;
   bool _limitLoaded = false;
 
+  // Track message count to only auto-scroll on new messages, not every rebuild
+  int _lastMsgCount = 0;
+  // Latest messages snapshot — avoids redundant Firestore fetch when sending AI message
+  List<MessageModel> _currentMessages = [];
+
   static const _dailyLimit = 20;
 
   bool get _isAiChat => widget.chatId.startsWith('ai_');
@@ -179,7 +184,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _scrollToBottom();
 
       if (_isAiChat && auth.userModel != null) {
-        final messages = await chatProvider.getMessages(widget.chatId).first;
+        // Use the already-loaded message list — no redundant Firestore fetch
+        final messages = _currentMessages;
         final allPosts = context.read<PostsProvider>().feedPosts;
         final availablePlaces = allPosts.map((p) => '${p.title} in ${p.location}').join(', ');
 
@@ -298,6 +304,23 @@ class _ConversationScreenState extends State<ConversationScreen> {
           final limitReached = _isAiChat && !isSuperUser && _limitReached;
           final todayAiMsgs = _todayAiCount;
 
+          // Keep current messages available for AI sending (avoids redundant fetch)
+          _currentMessages = messages;
+
+          // Only auto-scroll when a new message arrives, not on every rebuild
+          if (messages.length > _lastMsgCount) {
+            _lastMsgCount = messages.length;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollCtrl.hasClients) {
+                _scrollCtrl.animateTo(
+                  _scrollCtrl.position.maxScrollExtent,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut,
+                );
+              }
+            });
+          }
+
           Widget listWidget;
           if (snap.connectionState == ConnectionState.waiting && messages.isEmpty) {
             listWidget = const Center(
@@ -320,7 +343,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
               ],
             );
           } else {
-            _scrollToBottom();
             listWidget = ListView.builder(
               controller: _scrollCtrl,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

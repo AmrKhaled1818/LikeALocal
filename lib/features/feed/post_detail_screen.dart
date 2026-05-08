@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -31,6 +32,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final PostsRepo _repo = PostsRepo();
   final _commentCtrl = TextEditingController();
   bool _submitting = false;
+
+  int? _userVote; // 1 = upvoted, -1 = downvoted, null = none
+  bool _isSaved = false;
+  bool _voteInited = false;
+  bool _savedInited = false;
 
   String _resolveAvatar(PostModel post, AuthProvider auth) {
     if (post.userId == auth.uid) {
@@ -75,7 +81,74 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  // Called once per StreamBuilder emission to lazily set vote/save state.
+  // Safe to call inside build — only writes instance fields, never calls setState.
+  void _lazyInit(PostModel post, AuthProvider auth) {
+    if (!_voteInited && auth.userModel != null) {
+      _voteInited = true;
+      if (post.upvotedBy.contains(auth.userModel!.username)) _userVote = 1;
+    }
+    if (!_savedInited && auth.uid.isNotEmpty) {
+      _savedInited = true;
+      final pp = context.read<PostsProvider>();
+      if (pp.savedIdsLoaded) {
+        _isSaved = pp.isPostSavedLocally(post.postId);
+      } else {
+        pp.loadSavedIds(auth.uid).then((_) {
+          if (mounted) setState(() => _isSaved = pp.isPostSavedLocally(post.postId));
+        });
+      }
+    }
+  }
+
+  void _handleVote(int vote, PostModel post, AuthProvider auth) {
+    if (auth.uid.isEmpty) return;
+    if (_userVote == vote) {
+      setState(() => _userVote = null);
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    final pp = context.read<PostsProvider>();
+    if (vote == 1) {
+      pp.upvotePost(post.postId, auth.uid, post.userId,
+          auth.userModel?.username ?? 'User');
+    } else {
+      pp.downvotePost(post.postId);
+    }
+    setState(() => _userVote = vote);
+  }
+
+  Future<void> _handleSave(AuthProvider auth, PostModel post) async {
+    if (auth.uid.isEmpty) return;
+    HapticFeedback.lightImpact();
+    final pp = context.read<PostsProvider>();
+    if (_isSaved) {
+      setState(() => _isSaved = false);
+      await pp.unsavePost(auth.uid, post.postId);
+      return;
+    }
+    if (!(auth.userModel?.isSuperUser ?? false)) {
+      final saved = await pp.getSavedPosts(auth.uid);
+      if (!mounted) return;
+      if (saved.length >= 5) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Save limit reached (5/5). Earn 100 karma to unlock unlimited saves.'),
+          duration: Duration(seconds: 3),
+        ));
+        return;
+      }
+    }
+    setState(() => _isSaved = true);
+    await pp.savePost(auth.uid, post.postId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pinned!'), duration: Duration(seconds: 2)),
+      );
+    }
+  }
+
   Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner, AuthProvider auth) {
+    _lazyInit(post, auth);
     return Scaffold(
       body: Column(
         children: [
@@ -222,6 +295,127 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                   color: kMutedFg, fontSize: 12)),
                         ),
                         const SizedBox(height: 12),
+
+                        // ── Vote / save / time row ──────────────────────
+                        Row(
+                          children: [
+                            // Upvote pill
+                            GestureDetector(
+                              onTap: () => _handleVote(1, post, auth),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _userVote == 1
+                                      ? kOrange.withValues(alpha: 0.12)
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: _userVote == 1
+                                        ? kOrange
+                                        : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.arrow_upward_rounded,
+                                        size: 16,
+                                        color: _userVote == 1
+                                            ? kOrange
+                                            : kMutedFg),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${post.upvotes}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: _userVote == 1
+                                            ? kOrange
+                                            : null,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Downvote pill
+                            GestureDetector(
+                              onTap: () => _handleVote(-1, post, auth),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _userVote == -1
+                                      ? Colors.blue.withValues(alpha: 0.1)
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: _userVote == -1
+                                        ? Colors.blue
+                                        : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.arrow_downward_rounded,
+                                        size: 16,
+                                        color: _userVote == -1
+                                            ? Colors.blue
+                                            : kMutedFg),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${post.downvotes}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: _userVote == -1
+                                            ? Colors.blue
+                                            : kMutedFg,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            // Timestamp
+                            Text(
+                              timeago.format(post.createdAt.toDate()),
+                              style: const TextStyle(
+                                  color: kMutedFg, fontSize: 12),
+                            ),
+                            const SizedBox(width: 8),
+                            // Save button
+                            GestureDetector(
+                              onTap: () => _handleSave(auth, post),
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 200),
+                                child: Icon(
+                                  _isSaved
+                                      ? Icons.bookmark
+                                      : Icons.bookmark_outline,
+                                  key: ValueKey(_isSaved),
+                                  color: _isSaved ? kAmber : kMutedFg,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // ────────────────────────────────────────────────
+
                         Text(post.description,
                             style: const TextStyle(
                                 color: null, fontSize: 14, height: 1.5)),
@@ -343,9 +537,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
                         const SizedBox(height: 20),
                         const Divider(),
-                        const Text('Comments',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16, color: null)),
+                        Row(
+                          children: [
+                            const Icon(Icons.mode_comment_outlined,
+                                size: 18, color: kMutedFg),
+                            const SizedBox(width: 8),
+                            Text(
+                              post.commentCount == 0
+                                  ? 'Comments'
+                                  : 'Comments (${post.commentCount})',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: null),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -356,15 +563,48 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 StreamBuilder<List<CommentModel>>(
                   stream: _repo.getComments(widget.postId),
                   builder: (context, snap) {
-                    if (!snap.hasData) {
+                    if (snap.connectionState == ConnectionState.waiting &&
+                        !snap.hasData) {
                       return const SliverToBoxAdapter(
-                        child: Center(
-                            child: CircularProgressIndicator(color: kOrange)),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                              child: CircularProgressIndicator(color: kOrange)),
+                        ),
                       );
                     }
-                    final comments = snap.data!;
+                    final comments = snap.data ?? [];
                     final topLevel =
                         comments.where((c) => c.parentId == null).toList();
+
+                    if (topLevel.isEmpty) {
+                      return const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 32),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.chat_bubble_outline,
+                                    size: 40, color: kMutedFg),
+                                SizedBox(height: 12),
+                                Text('No comments yet',
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: kMutedFg)),
+                                SizedBox(height: 4),
+                                Text('Be the first to share your thoughts!',
+                                    style: TextStyle(
+                                        color: kMutedFg, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, i) {

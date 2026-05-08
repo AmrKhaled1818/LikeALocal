@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -16,6 +17,10 @@ class PostsProvider extends ChangeNotifier {
   DocumentSnapshot? _lastDoc;
   String? _error;
 
+  // Saved-post IDs cache — avoids per-card Firestore reads
+  Set<String> _savedPostIds = {};
+  bool _savedIdsLoaded = false;
+
   static const _pageSize = 10;
 
   List<PostModel> get feedPosts => _feedPosts;
@@ -23,6 +28,7 @@ class PostsProvider extends ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
   String? get error => _error;
+  bool get savedIdsLoaded => _savedIdsLoaded;
 
   PostsProvider() {
     _loadFirstPage();
@@ -35,7 +41,6 @@ class PostsProvider extends ChangeNotifier {
     _lastDoc = null;
     notifyListeners();
     try {
-      // Seed curated places to Firestore (skips existing ones)
       SeedPlaces.seedToFirestore().catchError((_) => 0);
 
       final (posts, lastDoc) = await _repo.getFeedPage(limit: _pageSize);
@@ -43,8 +48,6 @@ class PostsProvider extends ChangeNotifier {
       _lastDoc = lastDoc;
       _hasMore = posts.length == _pageSize;
 
-      // Merge any seed places not yet in the paginated feed so they
-      // always appear on the map regardless of pagination state.
       final existingIds = _feedPosts.map((p) => p.postId).toSet();
       for (final seed in SeedPlaces.all) {
         if (!existingIds.contains(seed.postId)) {
@@ -108,25 +111,36 @@ class PostsProvider extends ChangeNotifier {
 
   Future<void> upvotePost(
       String postId, String voterId, String authorId, String voterName) async {
+    // Guard against duplicate upvotes using local state
+    final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (postIndex != -1) {
+      final post = _feedPosts[postIndex];
+      if (post.upvotedBy.contains(voterName)) return; // already voted
+
+      // Optimistic update
+      final updatedUpvoters = List<String>.from(post.upvotedBy)..add(voterName);
+      _feedPosts[postIndex] = post.copyWith(
+        upvotes: post.upvotes + 1,
+        upvotedBy: updatedUpvoters,
+      );
+      notifyListeners();
+    }
+
     try {
       await _repo.upvotePost(postId, voterId, authorId, voterName);
-      
-      // Update local state upvotedBy list for immediate UI feedback
-      final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
+    } catch (e) {
+      // Revert optimistic update on failure
       if (postIndex != -1) {
         final post = _feedPosts[postIndex];
-        if (!post.upvotedBy.contains(voterName)) {
-          final updatedUpvoters = List<String>.from(post.upvotedBy)..add(voterName);
-          _feedPosts[postIndex] = post.copyWith(
-            upvotes: post.upvotes + 1,
-            upvotedBy: updatedUpvoters,
-          );
-          notifyListeners();
-        }
+        final revertedUpvoters = List<String>.from(post.upvotedBy)
+          ..remove(voterName);
+        _feedPosts[postIndex] = post.copyWith(
+          upvotes: (post.upvotes - 1).clamp(0, 999999),
+          upvotedBy: revertedUpvoters,
+        );
+        notifyListeners();
       }
-    } catch (e) {
       _error = e.toString();
-      notifyListeners();
     }
   }
 
@@ -134,6 +148,7 @@ class PostsProvider extends ChangeNotifier {
     try {
       await _repo.deletePost(postId);
       _feedPosts.removeWhere((p) => p.postId == postId);
+      _savedPostIds.remove(postId);
       notifyListeners();
       return true;
     } catch (e) {
@@ -144,11 +159,22 @@ class PostsProvider extends ChangeNotifier {
   }
 
   Future<void> downvotePost(String postId) async {
+    final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (postIndex != -1) {
+      final post = _feedPosts[postIndex];
+      _feedPosts[postIndex] = post.copyWith(downvotes: post.downvotes + 1);
+      notifyListeners();
+    }
     try {
       await _repo.downvotePost(postId);
     } catch (e) {
+      if (postIndex != -1) {
+        final post = _feedPosts[postIndex];
+        _feedPosts[postIndex] = post.copyWith(
+            downvotes: (post.downvotes - 1).clamp(0, 999999));
+        notifyListeners();
+      }
       _error = e.toString();
-      notifyListeners();
     }
   }
 
@@ -168,25 +194,46 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
+  // ── Saved-post cache ──────────────────────────────────────────────────────
+
+  Future<void> loadSavedIds(String userId) async {
+    if (_savedIdsLoaded) return;
+    try {
+      final ids = await _repo.getSavedPostIds(userId);
+      _savedPostIds = ids.toSet();
+      _savedIdsLoaded = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  bool isPostSavedLocally(String postId) => _savedPostIds.contains(postId);
+
   Future<void> savePost(String userId, String postId) async {
+    _savedPostIds.add(postId);
+    notifyListeners();
     try {
       await _repo.savePost(userId, postId);
     } catch (e) {
-      _error = e.toString();
+      _savedPostIds.remove(postId);
       notifyListeners();
+      _error = e.toString();
     }
   }
 
   Future<void> unsavePost(String userId, String postId) async {
+    _savedPostIds.remove(postId);
+    notifyListeners();
     try {
       await _repo.unsavePost(userId, postId);
     } catch (e) {
-      _error = e.toString();
+      _savedPostIds.add(postId);
       notifyListeners();
+      _error = e.toString();
     }
   }
 
   Future<bool> isPostSaved(String userId, String postId) async {
+    if (_savedIdsLoaded) return _savedPostIds.contains(postId);
     return await _repo.isPostSaved(userId, postId);
   }
 
@@ -207,6 +254,13 @@ class PostsProvider extends ChangeNotifier {
   }
 
   void refresh() {
+    _savedIdsLoaded = false;
+    _savedPostIds = {};
     _loadFirstPage();
+  }
+
+  void resetSavedCache() {
+    _savedIdsLoaded = false;
+    _savedPostIds = {};
   }
 }

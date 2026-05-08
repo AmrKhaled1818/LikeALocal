@@ -144,9 +144,9 @@ class PostsRepo {
       'upvotes': FieldValue.increment(1),
       'upvotedBy': FieldValue.arrayUnion([voterName]),
     });
-    await _userRepo.addKarma(authorId, 2);
-    // Don't notify when the post owner upvotes their own post
+    // Only award karma and notify when another user upvotes (not self-upvote)
     if (voterId != authorId) {
+      await _userRepo.addKarma(authorId, 2);
       await _createNotification(NotificationModel(
         notifId: '',
         userId: authorId,
@@ -221,13 +221,17 @@ class PostsRepo {
     return doc.exists;
   }
 
-  Future<List<PostModel>> getSavedPosts(String userId) async {
+  Future<List<String>> getSavedPostIds(String userId) async {
     final snap = await _db
         .collection('users')
         .doc(userId)
         .collection('savedPosts')
         .get();
-    final ids = snap.docs.map((d) => d.id).toList();
+    return snap.docs.map((d) => d.id).toList();
+  }
+
+  Future<List<PostModel>> getSavedPosts(String userId) async {
+    final ids = await getSavedPostIds(userId);
     if (ids.isEmpty) return [];
     final posts = await Future.wait(ids.map((id) => getPost(id)));
     return posts.whereType<PostModel>().toList();

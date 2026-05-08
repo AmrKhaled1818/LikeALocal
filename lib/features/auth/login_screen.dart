@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/providers/auth_provider.dart';
@@ -57,34 +57,41 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   Future<void> _loadRememberedEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedEmail = prefs.getString('remembered_email');
-    final savedPassword = prefs.getString('remembered_password');
-    if (savedEmail != null && savedEmail.isNotEmpty && mounted) {
-      setState(() {
-        _emailCtrl.text = savedEmail;
-        _rememberMe = true;
-        _emailTouched = true;
-      });
-    }
-    if (savedPassword != null && savedPassword.isNotEmpty && mounted) {
-      setState(() {
-        _passwordCtrl.text = savedPassword;
-        _passwordTouched = true;
-      });
-    }
+    try {
+      final savedEmail = await _storage.read(key: 'remembered_email');
+      final savedPassword = await _storage.read(key: 'remembered_password');
+      if (savedEmail != null && savedEmail.isNotEmpty && mounted) {
+        setState(() {
+          _emailCtrl.text = savedEmail;
+          _rememberMe = true;
+          _emailTouched = true;
+        });
+      }
+      if (savedPassword != null && savedPassword.isNotEmpty && mounted) {
+        setState(() {
+          _passwordCtrl.text = savedPassword;
+          _passwordTouched = true;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveRememberedEmail(String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_rememberMe) {
-      await prefs.setString('remembered_email', email);
-      await prefs.setString('remembered_password', _passwordCtrl.text);
-    } else {
-      await prefs.remove('remembered_email');
-      await prefs.remove('remembered_password');
-    }
+    try {
+      if (_rememberMe) {
+        await _storage.write(key: 'remembered_email', value: email);
+        await _storage.write(
+            key: 'remembered_password', value: _passwordCtrl.text);
+      } else {
+        await _storage.delete(key: 'remembered_email');
+        await _storage.delete(key: 'remembered_password');
+      }
+    } catch (_) {}
   }
 
   Widget _validationIcon(bool touched, String? error) {

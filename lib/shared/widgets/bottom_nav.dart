@@ -7,8 +7,9 @@ import '../../shared/providers/chat_provider.dart';
 
 class AppBottomNav extends StatelessWidget {
   final int currentIndex;
+  final void Function(int)? onTap;
 
-  const AppBottomNav({super.key, required this.currentIndex});
+  const AppBottomNav({super.key, required this.currentIndex, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +33,7 @@ class AppBottomNav extends StatelessWidget {
       ),
       child: BottomNavigationBar(
         currentIndex: currentIndex,
-        onTap: (i) => _onTap(context, i),
+        onTap: (i) => onTap != null ? onTap!(i) : _onTap(context, i),
         selectedItemColor: kOrange,
         unselectedItemColor: kMutedFg,
         type: BottomNavigationBarType.fixed,

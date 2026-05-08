@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/repositories/auth_repo.dart';
@@ -14,6 +15,9 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Subscription reference so we can cancel it on sign-out / re-login
+  StreamSubscription<UserModel?>? _userSub;
+
   User? get firebaseUser => _firebaseUser;
   UserModel? get userModel => _userModel;
   bool get isLoading => _isLoading;
@@ -26,9 +30,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _onAuthStateChanged(User? user) async {
+    // Cancel any existing user-watch before creating a new one
+    await _userSub?.cancel();
+    _userSub = null;
+
     _firebaseUser = user;
     if (user != null) {
-      _userRepo.watchUser(user.uid).listen((model) {
+      _userSub = _userRepo.watchUser(user.uid).listen((model) {
         _userModel = model;
         notifyListeners();
       });
@@ -137,5 +145,11 @@ class AuthProvider extends ChangeNotifier {
 
   void _clearError() {
     _errorMessage = null;
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
   }
 }

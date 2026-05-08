@@ -145,20 +145,13 @@ class _NotificationTile extends StatelessWidget {
     return ListTile(
       tileColor: notif.read ? null : kOrange.withOpacity(0.04),
       onTap: () {
-        if (!notif.read) {
+        // Mark by document ID — avoids full collection scan and
+        // accidental multi-match when two notifications share the same text
+        if (!notif.read && notif.notifId.isNotEmpty) {
           FirebaseFirestore.instance
               .collection('notifications')
-              .where('userId', isEqualTo: notif.userId)
-              .get()
-              .then((snap) {
-            for (final doc in snap.docs) {
-              final data = doc.data();
-              if (data['title'] == notif.title &&
-                  data['body'] == notif.body) {
-                doc.reference.update({'read': true});
-              }
-            }
-          });
+              .doc(notif.notifId)
+              .update({'read': true});
         }
         if (notif.postId != null && notif.postId!.isNotEmpty) {
           context.push('/post/${notif.postId}');
