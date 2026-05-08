@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -163,7 +164,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   radius: 44,
                   backgroundColor: kOrange,
                   backgroundImage: user.avatarUrl.isNotEmpty
-                      ? NetworkImage(user.avatarUrl)
+                      ? CachedNetworkImageProvider(user.avatarUrl)
                       : null,
                   child: user.avatarUrl.isEmpty
                       ? Text(

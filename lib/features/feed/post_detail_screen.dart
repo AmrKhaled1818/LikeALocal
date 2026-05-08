@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/map_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
@@ -233,7 +234,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             CircleAvatar(
                               radius: 18,
                               backgroundImage: _resolveAvatar(post, auth).isNotEmpty
-                                  ? NetworkImage(_resolveAvatar(post, auth))
+                                  ? CachedNetworkImageProvider(_resolveAvatar(post, auth))
                                   : null,
                               backgroundColor: kOrange,
                               child: _resolveAvatar(post, auth).isEmpty
@@ -498,29 +499,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: ElevatedButton.icon(
-                                  onPressed: () async {
-                                    final url = Uri.parse(
-                                      'https://www.google.com/maps/dir/?api=1'
-                                      '&destination=${Uri.encodeComponent('${post.title}, ${post.location}')}'
-                                      '&travelmode=driving',
-                                    );
-                                    try {
-                                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                                    } catch (_) {
-                                      try {
-                                        await launchUrl(url, mode: LaunchMode.platformDefault);
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Could not open maps. Fully restart the app.'),
-                                              backgroundColor: Colors.red,
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    }
-                                  },
+                                  onPressed: () => launchDirections(context, post),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF1A73E8),
                                     foregroundColor: Colors.white,
@@ -839,7 +818,7 @@ class _CommentItemState extends State<_CommentItem> {
             radius: 14,
             backgroundColor: kOrange,
             backgroundImage: c.userAvatarUrl.isNotEmpty
-                ? NetworkImage(c.userAvatarUrl)
+                ? CachedNetworkImageProvider(c.userAvatarUrl)
                 : null,
             child: c.userAvatarUrl.isEmpty
                 ? Text(c.username.substring(0, 1).toUpperCase(),

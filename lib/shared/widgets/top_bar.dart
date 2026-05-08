@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -104,8 +105,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
                 child: CircleAvatar(
                   radius: 16,
                   backgroundColor: kOrange,
-                  backgroundImage:
-                      avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                  backgroundImage: avatarUrl.isNotEmpty
+                      ? CachedNetworkImageProvider(avatarUrl)
+                      : null,
                   child: avatarUrl.isEmpty
                       ? Text(
                           (auth.userModel?.username ?? 'U')

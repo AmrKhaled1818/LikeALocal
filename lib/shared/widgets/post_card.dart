@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
 import '../../data/models/post_model.dart';
-import '../../data/models/comment_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import 'super_user_badge.dart';
@@ -44,9 +43,6 @@ class _PostCardState extends State<PostCard>
   late final Animation<double> _heartScale;
   late final Animation<Offset> _heartSlide;
   bool _showHeart = false;
-
-  final _commentCtrl = TextEditingController();
-  bool _submittingComment = false;
 
   @override
   void initState() {
@@ -113,7 +109,6 @@ class _PostCardState extends State<PostCard>
   @override
   void dispose() {
     _heartCtrl.dispose();
-    _commentCtrl.dispose();
     super.dispose();
   }
 
@@ -133,10 +128,11 @@ class _PostCardState extends State<PostCard>
     final catColor = _catColor(post.category);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final auth = context.watch<AuthProvider>();
-    final avatarUrl = (post.userId == auth.uid)
-        ? (auth.userModel?.avatarUrl ?? post.userAvatarUrl)
-        : post.userAvatarUrl;
+    // Only rebuild this card when the avatar URL itself changes, not on every auth event
+    final avatarUrl = context.select<AuthProvider, String>((a) =>
+        (post.userId == a.uid)
+            ? (a.userModel?.avatarUrl ?? post.userAvatarUrl)
+            : post.userAvatarUrl);
 
     return GestureDetector(
       onTap: () => context.push('/post/${post.postId}'),
@@ -170,7 +166,7 @@ class _PostCardState extends State<PostCard>
                         radius: 18,
                         backgroundColor: kOrange,
                         backgroundImage: avatarUrl.isNotEmpty
-                            ? NetworkImage(avatarUrl)
+                            ? CachedNetworkImageProvider(avatarUrl)
                             : null,
                         child: avatarUrl.isEmpty
                             ? Text(
@@ -420,61 +416,38 @@ class _PostCardState extends State<PostCard>
                     ),
                   ),
 
-                // Inline comment input
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    children: [
-                      Consumer<AuthProvider>(
-                        builder: (context, auth, _) {
-                          final avatar = auth.userModel?.avatarUrl ?? '';
-                          final name = auth.userModel?.username ?? 'U';
+                // Tap to comment — opens detail screen (avoids N live TextFields in the feed)
+                GestureDetector(
+                  onTap: () => context.push('/post/${post.postId}'),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    child: Row(
+                      children: [
+                        Builder(builder: (context) {
+                          final avatar = context.select<AuthProvider, String>(
+                              (a) => a.userModel?.avatarUrl ?? '');
+                          final name = context.select<AuthProvider, String>(
+                              (a) => a.userModel?.username ?? 'U');
                           return CircleAvatar(
                             radius: 12,
                             backgroundColor: kOrange,
                             backgroundImage: avatar.isNotEmpty
-                                ? NetworkImage(avatar)
+                                ? CachedNetworkImageProvider(avatar)
                                 : null,
                             child: avatar.isEmpty
-                                ? Text(
-                                    name.substring(0, 1).toUpperCase(),
+                                ? Text(name.substring(0, 1).toUpperCase(),
                                     style: const TextStyle(
                                         color: Colors.white, fontSize: 10))
                                 : null,
                           );
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _commentCtrl,
-                          style: TextStyle(
-                              color:
-                                  Theme.of(context).colorScheme.onSurface,
-                              fontSize: 13),
-                          decoration: const InputDecoration(
-                            hintText: 'Add a comment...',
-                            hintStyle:
-                                TextStyle(color: kMutedFg, fontSize: 13),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onSubmitted: (val) => _submitComment(val),
-                        ),
-                      ),
-                      if (_submittingComment)
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: kOrange),
-                        ),
-                    ],
+                        }),
+                        const SizedBox(width: 8),
+                        const Text('Add a comment...',
+                            style: TextStyle(color: kMutedFg, fontSize: 13)),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
               ],
             ),
           ),
@@ -571,29 +544,4 @@ class _PostCardState extends State<PostCard>
     }
   }
 
-  Future<void> _submitComment(String text) async {
-    if (text.trim().isEmpty) return;
-    final auth = context.read<AuthProvider>();
-    if (auth.uid.isEmpty) return;
-
-    setState(() => _submittingComment = true);
-    try {
-      final comment = CommentModel(
-        commentId: '',
-        postId: widget.post.postId,
-        userId: auth.uid,
-        username: auth.userModel?.username ?? 'User',
-        userAvatarUrl: auth.userModel?.avatarUrl ?? '',
-        isSuperUser: auth.userModel?.isSuperUser ?? false,
-        content: text.trim(),
-      );
-      await context.read<PostsProvider>().addComment(comment);
-      _commentCtrl.clear();
-      FocusScope.of(context).unfocus();
-    } catch (_) {
-      // ignore
-    } finally {
-      if (mounted) setState(() => _submittingComment = false);
-    }
-  }
 }

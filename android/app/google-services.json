@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:677586201088:android:4c0946ebc69e0fbffa06e5",
         "android_client_info": {
-          "package_name": "com.example.like_a_local"
+          "package_name": "com.likealocal.app"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "677586201088-kv8t8q5tsgdni73aivm6r54ip5gi50ve.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.like_a_local",
+            "package_name": "com.likealocal.app",
             "certificate_hash": "29a6c77daf086515fda4f4fae7c7ec3efea1720f"
           }
         },

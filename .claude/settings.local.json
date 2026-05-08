@@ -59,7 +59,11 @@
       "Bash(/mnt/c/flutter/bin/flutter analyze *)",
       "Bash(bash *)",
       "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\Dell\\\\Desktop\\\\Mobile_Project && flutter analyze --no-pub 2>&1\")",
-      "Bash(cmd.exe *)"
+      "Bash(cmd.exe *)",
+      "Bash(grep -v '.dart_tool\\\\|.git\\\\|build\\\\|\\\\.dart$')",
+      "Bash(xargs -I{} grep -l \"cached_network_image\" {})",
+      "Bash(sed -n '237,243p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)",
+      "Bash(sed -n '817,825p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)"
     ]
   }
 }

@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/map_utils.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
@@ -632,7 +633,7 @@ class _MapScreenState extends State<MapScreen> {
                   additionalOptions: _darkMap
                       ? const {'api_key': AppConfig.stadiaApiKey}
                       : const {},
-                  userAgentPackageName: 'com.example.like_a_local',
+                  userAgentPackageName: 'com.likealocal.app',
                   maxZoom: 20,
                 ),
                 // F25 — Clustered post markers
@@ -1222,29 +1223,7 @@ class _PostBottomSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () async {
-                final url = Uri.parse(
-                  'https://www.google.com/maps/dir/?api=1'
-                  '&destination=${Uri.encodeComponent('${post.title}, ${post.location}')}'
-                  '&travelmode=driving',
-                );
-                try {
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                } catch (_) {
-                  try {
-                    await launchUrl(url, mode: LaunchMode.platformDefault);
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Could not open maps. Please fully restart the app (stop & rebuild).'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                }
-              },
+              onPressed: () => launchDirections(context, post),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A73E8),
                 foregroundColor: Colors.white,

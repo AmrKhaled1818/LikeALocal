@@ -809,7 +809,7 @@ class _PeopleResults extends StatelessWidget {
         return ListTile(
           leading: CircleAvatar(
             backgroundImage: user.avatarUrl.isNotEmpty
-                ? NetworkImage(user.avatarUrl)
+                ? CachedNetworkImageProvider(user.avatarUrl)
                 : null,
             backgroundColor: kOrange,
             child: user.avatarUrl.isEmpty

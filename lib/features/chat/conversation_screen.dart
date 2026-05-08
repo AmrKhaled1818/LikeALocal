@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/map_utils.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/post_model.dart';
 import '../../data/repositories/user_repo.dart';
@@ -682,16 +683,7 @@ class _PostChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 GestureDetector(
-                  onTap: () async {
-                    final query = Uri.encodeComponent('${post.title}, ${post.location}');
-                    final url = Uri.parse(
-                        'https://www.google.com/maps/dir/?api=1'
-                        '&destination=$query'
-                        '&travelmode=driving');
-                    try {
-                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                    } catch (_) {}
-                  },
+                  onTap: () => launchDirections(context, post),
                   child: Container(
                     padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(

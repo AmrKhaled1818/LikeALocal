@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -32,7 +33,7 @@ class SidebarMenu extends StatelessWidget {
                         radius: 30,
                         backgroundColor: kOrange,
                         backgroundImage: (user?.avatarUrl.isNotEmpty ?? false)
-                            ? NetworkImage(user!.avatarUrl)
+                            ? CachedNetworkImageProvider(user!.avatarUrl)
                             : null,
                         child: (user?.avatarUrl.isEmpty ?? true)
                             ? Text(

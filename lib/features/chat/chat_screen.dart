@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -244,7 +245,7 @@ class _ChatTileState extends State<_ChatTile> {
       leading: CircleAvatar(
         backgroundColor: kOrange,
         backgroundImage:
-            avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
         child: avatarUrl.isEmpty
             ? Text(
                 displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',

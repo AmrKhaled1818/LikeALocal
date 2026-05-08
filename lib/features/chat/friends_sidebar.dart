@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -238,7 +239,7 @@ class _UserSearchResultsState extends State<_UserSearchResults> {
             leading: CircleAvatar(
               backgroundColor: kOrange,
               backgroundImage:
-                  u.avatarUrl.isNotEmpty ? NetworkImage(u.avatarUrl) : null,
+                  u.avatarUrl.isNotEmpty ? CachedNetworkImageProvider(u.avatarUrl) : null,
               child: u.avatarUrl.isEmpty
                   ? Text(u.username.isNotEmpty ? u.username[0].toUpperCase() : '?',
                       style: const TextStyle(color: Colors.white))
@@ -359,7 +360,7 @@ class _ExistingChatTileState extends State<_ExistingChatTile> {
           CircleAvatar(
             backgroundColor: kOrange,
             backgroundImage: (_user?.avatarUrl.isNotEmpty == true)
-                ? NetworkImage(_user!.avatarUrl)
+                ? CachedNetworkImageProvider(_user!.avatarUrl)
                 : null,
             child: (_user?.avatarUrl.isEmpty != false)
                 ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
