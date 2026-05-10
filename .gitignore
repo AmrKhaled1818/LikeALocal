@@ -47,6 +47,7 @@ app.*.map.json
 # Secrets — DO NOT COMMIT
 lib/core/constants/app_config.dart
 lib/firebase_options.dart
+android/app/google-services.json
 
 # Claude Code local settings
 .claude/
