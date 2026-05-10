@@ -52,6 +52,30 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  static String _friendlyAuthError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect email or password';
+      case 'user-not-found':
+        return 'No account found with this email';
+      case 'weak-password':
+        return 'Password must be at least 6 characters';
+      case 'email-already-in-use':
+        return 'An account already exists with this email';
+      case 'invalid-email':
+        return 'Please enter a valid email address';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network';
+      case 'user-disabled':
+        return 'This account has been disabled';
+      default:
+        return e.message ?? 'Authentication failed';
+    }
+  }
+
   Future<bool> signIn(String email, String password) async {
     _setLoading(true);
     try {
@@ -59,7 +83,7 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } on FirebaseAuthException catch (e) {
-      _setError(e.message ?? 'Sign in failed');
+      _setError(_friendlyAuthError(e));
       return false;
     } finally {
       _setLoading(false);
@@ -74,7 +98,7 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } on FirebaseAuthException catch (e) {
-      _setError(e.message ?? 'Registration failed');
+      _setError(_friendlyAuthError(e));
       return false;
     } finally {
       _setLoading(false);
@@ -87,8 +111,12 @@ class AuthProvider extends ChangeNotifier {
       await _authRepo.signInWithGoogle();
       _clearError();
       return true;
+    } on FirebaseAuthException catch (e) {
+      _setError(_friendlyAuthError(e));
+      return false;
     } catch (e) {
-      _setError(e.toString());
+      if (e.toString().contains('cancelled')) return false;
+      _setError('Google sign-in failed. Please try again');
       return false;
     } finally {
       _setLoading(false);
@@ -109,10 +137,12 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } on FirebaseAuthException catch (e) {
-      _setError(e.message ?? 'Deletion failed. Please re-login and try again.');
+      _setError(e.code == 'requires-recent-login'
+          ? 'Please log out and log back in, then try again'
+          : _friendlyAuthError(e));
       return false;
     } catch (e) {
-      _setError(e.toString());
+      _setError('Failed to delete account. Please try again');
       return false;
     } finally {
       _setLoading(false);
@@ -126,7 +156,7 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } on FirebaseAuthException catch (e) {
-      _setError(e.message ?? 'Reset failed');
+      _setError(_friendlyAuthError(e));
       return false;
     } finally {
       _setLoading(false);
