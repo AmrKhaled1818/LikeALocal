@@ -274,59 +274,12 @@ class _PostCardState extends State<PostCard>
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                   child: Row(
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.arrow_upward,
-                                size: 18,
-                                color: _userVote == 1 ? kOrange : kMutedFg,
-                              ),
-                              onPressed: () => _handleVote(1),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              constraints: const BoxConstraints(),
-                            ),
-                            Text(
-                              '${widget.post.upvotes}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: _userVote == 1 ? kOrange : null,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              icon: Icon(
-                                Icons.arrow_downward,
-                                size: 18,
-                                color: _userVote == -1
-                                    ? Colors.blue
-                                    : kMutedFg,
-                              ),
-                              onPressed: () => _handleVote(-1),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              constraints: const BoxConstraints(),
-                            ),
-                            Text(
-                              '${widget.post.downvotes}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: _userVote == -1 ? Colors.blue : kMutedFg,
-                              ),
-                            ),
-                          ],
-                        ),
+                      _VotePill(
+                        upvotes: widget.post.upvotes,
+                        downvotes: widget.post.downvotes,
+                        userVote: _userVote,
+                        onUpvote: () => _handleVote(1),
+                        onDownvote: () => _handleVote(-1),
                       ),
                       const SizedBox(width: 8),
                       Row(
@@ -620,4 +573,65 @@ class _PostCardState extends State<PostCard>
     }
   }
 
+}
+
+class _VotePill extends StatelessWidget {
+  final int upvotes;
+  final int downvotes;
+  final int? userVote;
+  final VoidCallback onUpvote;
+  final VoidCallback onDownvote;
+
+  const _VotePill({
+    required this.upvotes,
+    required this.downvotes,
+    required this.userVote,
+    required this.onUpvote,
+    required this.onDownvote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = Theme.of(context).colorScheme.surfaceContainerHighest;
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _btn(Icons.arrow_upward_rounded, upvotes, userVote == 1, kOrange, onUpvote),
+          Container(width: 1, height: 14, color: kMutedFg.withOpacity(0.25)),
+          _btn(Icons.arrow_downward_rounded, downvotes, userVote == -1, Colors.blue, onDownvote),
+        ],
+      ),
+    );
+  }
+
+  Widget _btn(IconData icon, int count, bool active, Color activeColor, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: active ? activeColor : kMutedFg),
+            const SizedBox(width: 3),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? activeColor : kMutedFg,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

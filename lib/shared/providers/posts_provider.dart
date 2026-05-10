@@ -118,6 +118,7 @@ class PostsProvider extends ChangeNotifier {
       if (post.upvotedBy.contains(voterName)) return false; // already voted
 
       final updatedUpvoters = List<String>.from(post.upvotedBy)..add(voterName);
+      _feedPosts = List<PostModel>.from(_feedPosts);
       _feedPosts[postIndex] = post.copyWith(
         upvotes: post.upvotes + 1,
         upvotedBy: updatedUpvoters,
@@ -133,6 +134,7 @@ class PostsProvider extends ChangeNotifier {
         final post = _feedPosts[postIndex];
         final revertedUpvoters = List<String>.from(post.upvotedBy)
           ..remove(voterName);
+        _feedPosts = List<PostModel>.from(_feedPosts);
         _feedPosts[postIndex] = post.copyWith(
           upvotes: (post.upvotes - 1).clamp(0, 999999),
           upvotedBy: revertedUpvoters,
@@ -162,6 +164,7 @@ class PostsProvider extends ChangeNotifier {
     final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
     if (postIndex != -1) {
       final post = _feedPosts[postIndex];
+      _feedPosts = List<PostModel>.from(_feedPosts);
       _feedPosts[postIndex] = post.copyWith(downvotes: post.downvotes + 1);
       notifyListeners();
     }
@@ -171,6 +174,7 @@ class PostsProvider extends ChangeNotifier {
     } catch (e) {
       if (postIndex != -1) {
         final post = _feedPosts[postIndex];
+        _feedPosts = List<PostModel>.from(_feedPosts);
         _feedPosts[postIndex] = post.copyWith(
             downvotes: (post.downvotes - 1).clamp(0, 999999));
         notifyListeners();
