@@ -48,6 +48,9 @@ app.*.map.json
 lib/core/constants/app_config.dart
 lib/firebase_options.dart
 android/app/google-services.json
+scripts/firebase-key.json
+**/*service-account*.json
+**/*firebase-key*.json
 
 # Claude Code local settings
 .claude/
