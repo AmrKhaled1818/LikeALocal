@@ -37,6 +37,8 @@ class _PostCardState extends State<PostCard>
     with SingleTickerProviderStateMixin {
   bool _isSaved = false;
   int? _userVote; // 1 = up, -1 = down, null = none
+  int _imageIndex = 0;
+  late final PageController _pageCtrl;
 
   late final AnimationController _heartCtrl;
   late final Animation<double> _heartFade;
@@ -48,6 +50,7 @@ class _PostCardState extends State<PostCard>
   void initState() {
     super.initState();
 
+    _pageCtrl = PageController();
     _heartCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 800));
     _heartFade = Tween<double>(begin: 1.0, end: 0.0).animate(
@@ -108,6 +111,7 @@ class _PostCardState extends State<PostCard>
 
   @override
   void dispose() {
+    _pageCtrl.dispose();
     _heartCtrl.dispose();
     super.dispose();
   }
@@ -261,31 +265,9 @@ class _PostCardState extends State<PostCard>
                   ),
                 ),
 
-                // Image
-                if (post.imageUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: CachedNetworkImage(
-                      imageUrl: post.imageUrl,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        height: 200,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        height: 200,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        child: const Icon(Icons.image_outlined,
-                            color: kMutedFg),
-                      ),
-                    ),
-                  ),
+                // Images — single or carousel
+                if (post.allImageUrls.isNotEmpty)
+                  _buildImageSection(context, post.allImageUrls),
 
                 // Actions row
                 Padding(
@@ -314,17 +296,14 @@ class _PostCardState extends State<PostCard>
                               constraints: const BoxConstraints(),
                             ),
                             Text(
-                              '+$_score',
+                              '${widget.post.upvotes}',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: _userVote == 1
-                                    ? kOrange
-                                    : _userVote == -1
-                                        ? Colors.blue
-                                        : null,
+                                color: _userVote == 1 ? kOrange : null,
                               ),
                             ),
+                            const SizedBox(width: 4),
                             IconButton(
                               icon: Icon(
                                 Icons.arrow_downward,
@@ -337,6 +316,14 @@ class _PostCardState extends State<PostCard>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
                               constraints: const BoxConstraints(),
+                            ),
+                            Text(
+                              '${widget.post.downvotes}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: _userVote == -1 ? Colors.blue : kMutedFg,
+                              ),
                             ),
                           ],
                         ),
@@ -479,27 +466,121 @@ class _PostCardState extends State<PostCard>
     );
   }
 
-  void _handleVote(int vote) {
+  Widget _buildImageSection(BuildContext context, List<String> urls) {
+    if (urls.length == 1) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: CachedNetworkImage(
+          imageUrl: urls.first,
+          height: 200,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(
+            height: 200,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          errorWidget: (_, __, ___) => Container(
+            height: 200,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: const Icon(Icons.image_outlined, color: kMutedFg),
+          ),
+        ),
+      );
+    }
+
+    // Multiple images — swipeable carousel
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Stack(
+        children: [
+          SizedBox(
+            height: 200,
+            child: PageView.builder(
+              controller: _pageCtrl,
+              itemCount: urls.length,
+              onPageChanged: (i) => setState(() => _imageIndex = i),
+              itemBuilder: (_, i) => CachedNetworkImage(
+                imageUrl: urls[i],
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  height: 200,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                ),
+                errorWidget: (_, __, ___) => Container(
+                  height: 200,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.image_outlined, color: kMutedFg),
+                ),
+              ),
+            ),
+          ),
+          // Dot indicators
+          Positioned(
+            bottom: 8,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(urls.length, (i) => AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _imageIndex == i ? 16 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _imageIndex == i ? kOrange : Colors.white.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              )),
+            ),
+          ),
+          // Image counter badge
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_imageIndex + 1}/${urls.length}',
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleVote(int vote) async {
     final auth = context.read<AuthProvider>();
     final posts = context.read<PostsProvider>();
     if (auth.uid.isEmpty) return;
 
     if (_userVote == vote) {
       setState(() => _userVote = null);
-      return; // un-vote — local state only, no Firestore call
+      return;
     }
 
     HapticFeedback.mediumImpact();
+    setState(() => _userVote = vote);
+    final bool ok;
     if (vote == 1) {
-      posts.upvotePost(
+      ok = await posts.upvotePost(
           widget.post.postId,
           auth.uid,
           widget.post.userId,
           auth.userModel?.username ?? 'User');
     } else {
-      posts.downvotePost(widget.post.postId);
+      ok = await posts.downvotePost(widget.post.postId);
     }
-    setState(() => _userVote = vote);
+    if (!ok && mounted) {
+      setState(() => _userVote = null);
+    }
   }
 
   Future<void> _handleSave() async {
@@ -516,20 +597,15 @@ class _PostCardState extends State<PostCard>
     }
 
     final isSuperUser = auth.userModel?.isSuperUser ?? false;
-    if (!isSuperUser) {
-      // Use the local cache count to check the limit
-      final savedPosts = await posts.getSavedPosts(auth.uid);
-      if (!mounted) return;
-      if (savedPosts.length >= 5) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Save limit reached (5/5). Unsave a post or earn 100 karma to unlock unlimited saves.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return;
-      }
+    if (!isSuperUser && posts.savedPostCount >= 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Save limit reached (5/5). Unsave a post or earn 100 karma to unlock unlimited saves.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
     }
 
     setState(() => _isSaved = true);

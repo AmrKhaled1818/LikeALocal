@@ -105,21 +105,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  void _handleVote(int vote, PostModel post, AuthProvider auth) {
+  Future<void> _handleVote(int vote, PostModel post, AuthProvider auth) async {
     if (auth.uid.isEmpty) return;
     if (_userVote == vote) {
       setState(() => _userVote = null);
       return;
     }
     HapticFeedback.mediumImpact();
+    setState(() => _userVote = vote);
     final pp = context.read<PostsProvider>();
+    final bool ok;
     if (vote == 1) {
-      pp.upvotePost(post.postId, auth.uid, post.userId,
+      ok = await pp.upvotePost(post.postId, auth.uid, post.userId,
           auth.userModel?.username ?? 'User');
     } else {
-      pp.downvotePost(post.postId);
+      ok = await pp.downvotePost(post.postId);
     }
-    setState(() => _userVote = vote);
+    if (!ok && mounted) {
+      setState(() => _userVote = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not register vote. Try again.')),
+      );
+    }
   }
 
   Future<void> _handleSave(AuthProvider auth, PostModel post) async {
@@ -746,6 +753,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.uid.isEmpty) return;
 
+    FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
     try {
       final comment = CommentModel(

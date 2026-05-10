@@ -29,6 +29,7 @@ class PostsProvider extends ChangeNotifier {
   bool get hasMore => _hasMore;
   String? get error => _error;
   bool get savedIdsLoaded => _savedIdsLoaded;
+  int get savedPostCount => _savedPostIds.length;
 
   PostsProvider() {
     _loadFirstPage();
@@ -80,9 +81,9 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<String?> createPost(PostModel post, File? imageFile) async {
+  Future<String?> createPost(PostModel post, List<File> imageFiles) async {
     try {
-      final newPost = await _repo.createPost(post, imageFile);
+      final newPost = await _repo.createPost(post, imageFiles);
       _feedPosts = [newPost, ..._feedPosts];
       notifyListeners();
       return newPost.postId;
@@ -93,9 +94,9 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updatePost(PostModel updatedPost, File? newImageFile) async {
+  Future<bool> updatePost(PostModel updatedPost, List<File> newImageFiles) async {
     try {
-      final result = await _repo.updatePost(updatedPost, newImageFile);
+      final result = await _repo.updatePost(updatedPost, newImageFiles);
       final index = _feedPosts.indexWhere((p) => p.postId == updatedPost.postId);
       if (index != -1) {
         _feedPosts[index] = result;
@@ -109,15 +110,13 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> upvotePost(
+  Future<bool> upvotePost(
       String postId, String voterId, String authorId, String voterName) async {
-    // Guard against duplicate upvotes using local state
     final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
     if (postIndex != -1) {
       final post = _feedPosts[postIndex];
-      if (post.upvotedBy.contains(voterName)) return; // already voted
+      if (post.upvotedBy.contains(voterName)) return false; // already voted
 
-      // Optimistic update
       final updatedUpvoters = List<String>.from(post.upvotedBy)..add(voterName);
       _feedPosts[postIndex] = post.copyWith(
         upvotes: post.upvotes + 1,
@@ -128,8 +127,8 @@ class PostsProvider extends ChangeNotifier {
 
     try {
       await _repo.upvotePost(postId, voterId, authorId, voterName);
+      return true;
     } catch (e) {
-      // Revert optimistic update on failure
       if (postIndex != -1) {
         final post = _feedPosts[postIndex];
         final revertedUpvoters = List<String>.from(post.upvotedBy)
@@ -141,6 +140,7 @@ class PostsProvider extends ChangeNotifier {
         notifyListeners();
       }
       _error = e.toString();
+      return false;
     }
   }
 
@@ -158,7 +158,7 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> downvotePost(String postId) async {
+  Future<bool> downvotePost(String postId) async {
     final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
     if (postIndex != -1) {
       final post = _feedPosts[postIndex];
@@ -167,6 +167,7 @@ class PostsProvider extends ChangeNotifier {
     }
     try {
       await _repo.downvotePost(postId);
+      return true;
     } catch (e) {
       if (postIndex != -1) {
         final post = _feedPosts[postIndex];
@@ -175,6 +176,7 @@ class PostsProvider extends ChangeNotifier {
         notifyListeners();
       }
       _error = e.toString();
+      return false;
     }
   }
 
