@@ -10,13 +10,13 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 
 // Freemium limits
 const int _kFreePostsPerDay = 3;
-const int _kFreeAiMessagesPerDay = 10;
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -33,7 +33,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _tipsCtrl = TextEditingController();
   final _dishesCtrl = TextEditingController();
 
-  File? _selectedImage;
+  final List<File> _selectedImages = [];
+  static const int _maxImages = 5;
   String _selectedCategory = 'Restaurant';
   bool _posting = false;
   bool _checkingLimit = true;
@@ -151,39 +152,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             children: [
               // Freemium limit banner
               if (!isSuperUser) _buildFreemiumBanner(limitReached),
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: kMuted,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: kMutedFg.withOpacity(0.3),
-                        width: 1.5,
-                        style: BorderStyle.solid),
-                  ),
-                  child: _selectedImage != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_selectedImage!,
-                              fit: BoxFit.cover,
-                              width: double.infinity),
-                        )
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.add_photo_alternate_outlined,
-                                size: 48, color: kMutedFg),
-                            SizedBox(height: 8),
-                            Text('Add a photo (optional)',
-                                style: TextStyle(
-                                    color: kMutedFg, fontSize: 14)),
-                          ],
-                        ),
-                ),
-              ),
+              _buildImagePicker(),
               const SizedBox(height: 20),
 
               // Caption — F23 character counter
@@ -286,7 +255,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                     'api_key': AppConfig.stadiaApiKey
                                   },
                                   userAgentPackageName:
-                                      'com.example.like_a_local',
+                                      'com.likealocal.app',
                                 ),
                                 MarkerLayer(markers: [
                                   Marker(
@@ -418,7 +387,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _tipsCtrl.clear();
     _dishesCtrl.clear();
     setState(() {
-      _selectedImage = null;
+      _selectedImages.clear();
       _pickedLat = null;
       _pickedLng = null;
       _selectedCategory = 'Restaurant';
@@ -485,47 +454,167 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  Future<void> _pickImage() async {
+  Widget _buildImagePicker() {
+    final remaining = _maxImages - _selectedImages.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_selectedImages.isNotEmpty) ...[
+          SizedBox(
+            height: 110,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _selectedImages.length + (remaining > 0 ? 1 : 0),
+              itemBuilder: (_, i) {
+                if (i == _selectedImages.length) {
+                  return _addMoreButton();
+                }
+                return _imageThumbnail(i);
+              },
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_selectedImages.length}/$_maxImages photos selected',
+            style: const TextStyle(color: kMutedFg, fontSize: 12),
+          ),
+        ] else
+          GestureDetector(
+            onTap: _addImages,
+            child: Container(
+              height: 160,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: kMuted,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_photo_alternate_outlined, size: 48, color: kMutedFg),
+                  SizedBox(height: 8),
+                  Text('Add photos (optional, up to 5)',
+                      style: TextStyle(color: kMutedFg, fontSize: 14)),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _imageThumbnail(int index) {
+    return Stack(
+      children: [
+        Container(
+          width: 100,
+          height: 100,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: index == 0
+                ? Border.all(color: kOrange, width: 2)
+                : null,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.file(_selectedImages[index], fit: BoxFit.cover),
+          ),
+        ),
+        if (index == 0)
+          Positioned(
+            bottom: 4,
+            left: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: kOrange,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('Cover', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        Positioned(
+          top: 2,
+          right: 10,
+          child: GestureDetector(
+            onTap: () => setState(() => _selectedImages.removeAt(index)),
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, color: Colors.white, size: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _addMoreButton() {
+    return GestureDetector(
+      onTap: _addImages,
+      child: Container(
+        width: 100,
+        height: 100,
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: kMuted,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_a_photo_outlined, color: kMutedFg, size: 24),
+            SizedBox(height: 4),
+            Text('Add more', style: TextStyle(color: kMutedFg, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addImages() async {
+    final remaining = _maxImages - _selectedImages.length;
+    if (remaining <= 0) return;
     try {
       final picker = ImagePicker();
-      // F18 — Compress on pick: maxWidth 1080px + quality 72 targets ~300-420KB
-      final picked = await picker.pickImage(
-        source: ImageSource.gallery,
+      final picked = await picker.pickMultiImage(
         maxWidth: 1080,
         maxHeight: 1080,
         imageQuality: 72,
       );
-      if (picked == null) return;
-      final file = File(picked.path);
-      final bytes = await file.length();
-      if (bytes > 4 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Image still too large after compression. Choose a smaller photo.'),
-              backgroundColor: kDestructive,
-            ),
-          );
+      if (picked.isEmpty) return;
+
+      final toAdd = picked.take(remaining).toList();
+      final files = <File>[];
+      for (final x in toAdd) {
+        final file = File(x.path);
+        final bytes = await file.length();
+        if (bytes > 4 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('One image was too large and was skipped.'),
+                backgroundColor: kDestructive,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+          continue;
         }
-        return;
+        files.add(file);
       }
-      setState(() => _selectedImage = file);
-      if (mounted) {
-        final kb = (bytes / 1024).round();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Image ready (${kb}KB)'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      if (files.isNotEmpty) setState(() => _selectedImages.addAll(files));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error picking image: $e'),
-              backgroundColor: kDestructive),
+          SnackBar(content: Text('Error picking images: $e'), backgroundColor: kDestructive),
         );
       }
     }
@@ -563,7 +652,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       // 45-second timeout so we never hang forever (Cloudinary + Firestore)
       final id = await context
           .read<PostsProvider>()
-          .createPost(post, _selectedImage)
+          .createPost(post, _selectedImages)
           .timeout(
         const Duration(seconds: 45),
         onTimeout: () {
@@ -578,10 +667,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final uid = auth.uid;
         final newCount = (prefs.getInt('post_count_$uid') ?? 0) + 1;
         await prefs.setInt('post_count_$uid', newCount);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Post shared! Karma +10'),
-              backgroundColor: Colors.green),
+        Fluttertoast.showToast(
+          msg: 'Post shared! Karma +10',
+          toastLength: Toast.LENGTH_SHORT,
+          backgroundColor: Colors.green,
+          textColor: Colors.white,
         );
         context.go('/feed');
       } else if (mounted) {
@@ -664,7 +754,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key={api_key}',
                 fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 additionalOptions: const {'api_key': AppConfig.stadiaApiKey},
-                userAgentPackageName: 'com.example.like_a_local',
+                userAgentPackageName: 'com.likealocal.app',
               ),
               if (_picked != null)
                 MarkerLayer(markers: [

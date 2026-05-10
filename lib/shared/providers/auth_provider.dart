@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/repositories/auth_repo.dart';
@@ -17,6 +18,8 @@ class AuthProvider extends ChangeNotifier {
 
   // Subscription reference so we can cancel it on sign-out / re-login
   StreamSubscription<UserModel?>? _userSub;
+  StreamSubscription? _notifSub;
+  bool _notifInitialized = false;
 
   User? get firebaseUser => _firebaseUser;
   UserModel? get userModel => _userModel;
@@ -30,9 +33,10 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _onAuthStateChanged(User? user) async {
-    // Cancel any existing user-watch before creating a new one
     await _userSub?.cancel();
+    await _notifSub?.cancel();
     _userSub = null;
+    _notifSub = null;
 
     _firebaseUser = user;
     if (user != null) {
@@ -46,6 +50,26 @@ class AuthProvider extends ChangeNotifier {
           await _userRepo.updateFcmToken(user.uid, token);
         }
       } catch (_) {}
+
+      _notifInitialized = false;
+      _notifSub = FirebaseFirestore.instance
+          .collection('notifications')
+          .where('userId', isEqualTo: user.uid)
+          .where('type', isEqualTo: 'upvote')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .snapshots()
+          .listen((snap) {
+        if (!_notifInitialized) {
+          _notifInitialized = true;
+          return; // skip existing notifications on login
+        }
+        for (final doc in snap.docs) {
+          final title = (doc.data()['title'] as String?) ?? 'New upvote';
+          final body = (doc.data()['body'] as String?) ?? '';
+          NotificationService.showLocalNotification(title, body);
+        }
+      }, onError: (_) {});
     } else {
       _userModel = null;
     }
@@ -180,6 +204,7 @@ class AuthProvider extends ChangeNotifier {
   @override
   void dispose() {
     _userSub?.cancel();
+    _notifSub?.cancel();
     super.dispose();
   }
 }

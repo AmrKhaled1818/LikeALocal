@@ -1,9 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/map_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -38,6 +38,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _isSaved = false;
   bool _voteInited = false;
   bool _savedInited = false;
+  int _imageIndex = 0;
+  PageController? _imagePageCtrl;
 
   String _resolveAvatar(PostModel post, AuthProvider auth) {
     if (post.userId == auth.uid) {
@@ -49,6 +51,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     _commentCtrl.dispose();
+    _imagePageCtrl?.dispose();
     super.dispose();
   }
 
@@ -128,16 +131,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       await pp.unsavePost(auth.uid, post.postId);
       return;
     }
-    if (!(auth.userModel?.isSuperUser ?? false)) {
-      final saved = await pp.getSavedPosts(auth.uid);
-      if (!mounted) return;
-      if (saved.length >= 5) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Save limit reached (5/5). Earn 100 karma to unlock unlimited saves.'),
-          duration: Duration(seconds: 3),
-        ));
-        return;
-      }
+    if (!(auth.userModel?.isSuperUser ?? false) && pp.savedPostCount >= 5) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Save limit reached (5/5). Earn 100 karma to unlock unlimited saves.'),
+        duration: Duration(seconds: 3),
+      ));
+      return;
     }
     setState(() => _isSaved = true);
     await pp.savePost(auth.uid, post.postId);
@@ -146,6 +145,75 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         const SnackBar(content: Text('Pinned!'), duration: Duration(seconds: 2)),
       );
     }
+  }
+
+  Widget _buildDetailImageSection(BuildContext context, PostModel post) {
+    final urls = post.allImageUrls;
+    if (urls.isEmpty) return Container(color: kMuted);
+    if (urls.length == 1) {
+      return GestureDetector(
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ImageViewerScreen(imageUrl: urls.first, heroTag: post.postId),
+        )),
+        child: Hero(
+          tag: post.postId,
+          child: CachedNetworkImage(
+            imageUrl: urls.first,
+            fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => Container(color: kMuted, child: const Icon(Icons.image_outlined, color: kMutedFg)),
+          ),
+        ),
+      );
+    }
+
+    _imagePageCtrl ??= PageController();
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _imagePageCtrl,
+          itemCount: urls.length,
+          onPageChanged: (i) => setState(() => _imageIndex = i),
+          itemBuilder: (_, i) => GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ImageViewerScreen(imageUrl: urls[i], heroTag: '${post.postId}_$i'),
+            )),
+            child: CachedNetworkImage(
+              imageUrl: urls[i],
+              fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => Container(color: kMuted, child: const Icon(Icons.image_outlined, color: kMutedFg)),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 10,
+          left: 0, right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(urls.length, (i) => AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: _imageIndex == i ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: _imageIndex == i ? kOrange : Colors.white.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            )),
+          ),
+        ),
+        Positioned(
+          top: 8, right: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+            child: Text(
+              '${_imageIndex + 1}/${urls.length}',
+              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner, AuthProvider auth) {
@@ -194,30 +262,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                   ],
                   flexibleSpace: FlexibleSpaceBar(
-                    background: post.imageUrl.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ImageViewerScreen(
-                                  imageUrl: post.imageUrl,
-                                  heroTag: post.postId,
-                                ),
-                              ),
-                            ),
-                            child: Hero(
-                              tag: post.postId,
-                              child: CachedNetworkImage(
-                                imageUrl: post.imageUrl,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => Container(
-                                    color: kMuted,
-                                    child: const Icon(Icons.image_outlined,
-                                        color: kMutedFg)),
-                              ),
-                            ),
-                          )
-                        : Container(color: kMuted),
+                    background: _buildDetailImageSection(context, post),
                   ),
                 ),
 
@@ -714,6 +759,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       );
       await context.read<PostsProvider>().addComment(comment);
       _commentCtrl.clear();
+      Fluttertoast.showToast(
+        msg: 'Comment posted! Karma +1',
+        toastLength: Toast.LENGTH_SHORT,
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

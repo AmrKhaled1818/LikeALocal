@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../data/models/message_model.dart';
 import '../../data/repositories/chat_repo.dart';
+import '../../data/services/notification_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatRepo _repo = ChatRepo();
@@ -10,17 +11,42 @@ class ChatProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _listeningUid;
   StreamSubscription? _chatsSub;
+  Map<String, int> _prevUnread = {};
+  bool _chatsInitialized = false;
 
   List<ChatModel> get chats => _chats;
   bool get isLoading => _isLoading;
 
   void startListening(String userId) {
-    // Don't create a duplicate subscription for the same user
     if (_listeningUid == userId) return;
     _chatsSub?.cancel();
     _listeningUid = userId;
+    _prevUnread = {};
+    _chatsInitialized = false;
     _chatsSub = _repo.getUserChats(userId).listen(
       (chats) {
+        if (!_chatsInitialized) {
+          // Snapshot existing unread counts without notifying
+          _chatsInitialized = true;
+          for (final chat in chats) {
+            _prevUnread[chat.chatId] = chat.unreadCount[userId] ?? 0;
+          }
+          _chats = chats;
+          notifyListeners();
+          return;
+        }
+        for (final chat in chats) {
+          if (chat.chatId.startsWith('ai_')) continue;
+          final prev = _prevUnread[chat.chatId] ?? 0;
+          final current = chat.unreadCount[userId] ?? 0;
+          if (current > prev && chat.lastMessage.isNotEmpty) {
+            NotificationService.showLocalNotification(
+              'New message',
+              chat.lastMessage,
+            );
+          }
+          _prevUnread[chat.chatId] = current;
+        }
         _chats = chats;
         notifyListeners();
       },
