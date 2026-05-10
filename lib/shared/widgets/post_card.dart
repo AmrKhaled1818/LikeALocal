@@ -509,30 +509,49 @@ class _PostCardState extends State<PostCard>
     );
   }
 
+  bool _voting = false;
+
   Future<void> _handleVote(int vote) async {
+    if (_voting) return;
     final auth = context.read<AuthProvider>();
     final posts = context.read<PostsProvider>();
     if (auth.uid.isEmpty) return;
 
-    if (_userVote == vote) {
-      setState(() => _userVote = null);
-      return;
-    }
-
+    _voting = true;
     HapticFeedback.mediumImpact();
-    setState(() => _userVote = vote);
-    final bool ok;
-    if (vote == 1) {
-      ok = await posts.upvotePost(
-          widget.post.postId,
-          auth.uid,
-          widget.post.userId,
-          auth.userModel?.username ?? 'User');
-    } else {
-      ok = await posts.downvotePost(widget.post.postId);
-    }
-    if (!ok && mounted) {
-      setState(() => _userVote = null);
+    try {
+      final prevVote = _userVote;
+      final voterName = auth.userModel?.username ?? 'User';
+
+      if (prevVote == vote) {
+        // Un-vote
+        setState(() => _userVote = null);
+        if (vote == 1) {
+          await posts.removeUpvote(widget.post.postId, voterName);
+        } else {
+          await posts.removeDownvote(widget.post.postId);
+        }
+        return;
+      }
+
+      // Remove previous vote before applying new one
+      if (prevVote == 1) {
+        await posts.removeUpvote(widget.post.postId, voterName);
+      } else if (prevVote == -1) {
+        await posts.removeDownvote(widget.post.postId);
+      }
+
+      setState(() => _userVote = vote);
+      final bool ok;
+      if (vote == 1) {
+        ok = await posts.upvotePost(
+            widget.post.postId, auth.uid, widget.post.userId, voterName);
+      } else {
+        ok = await posts.downvotePost(widget.post.postId);
+      }
+      if (!ok && mounted) setState(() => _userVote = prevVote);
+    } finally {
+      _voting = false;
     }
   }
 

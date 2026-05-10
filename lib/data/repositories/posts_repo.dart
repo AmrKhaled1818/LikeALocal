@@ -58,15 +58,18 @@ class PostsRepo {
     });
   }
 
-  Future<PostModel> updatePost(PostModel post, File? newImageFile) async {
-    String imageUrl = post.imageUrl;
-    String imagePublicId = post.imagePublicId;
+  Future<PostModel> updatePost(PostModel post, List<File> newImageFiles) async {
+    List<String> imageUrls = List<String>.from(post.imageUrls);
+    List<String> imagePublicIds = List<String>.from(post.imagePublicIds);
 
-    if (newImageFile != null) {
-      final result = await _cloudinary.uploadImage(newImageFile);
-      imageUrl = result.imageUrl;
-      imagePublicId = result.imagePublicId;
+    if (newImageFiles.isNotEmpty) {
+      final results = await _cloudinary.uploadImages(newImageFiles);
+      imageUrls.addAll(results.map((r) => r.imageUrl));
+      imagePublicIds.addAll(results.map((r) => r.imagePublicId));
     }
+
+    final firstUrl = imageUrls.isNotEmpty ? imageUrls.first : '';
+    final firstId = imagePublicIds.isNotEmpty ? imagePublicIds.first : '';
 
     await _db.collection('posts').doc(post.postId).update({
       'title': post.title,
@@ -77,31 +80,17 @@ class PostsRepo {
       'category': post.category,
       'localTips': post.localTips,
       'recommendedDishes': post.recommendedDishes,
-      'imageUrl': imageUrl,
-      'imagePublicId': imagePublicId,
+      'imageUrl': firstUrl,
+      'imagePublicId': firstId,
+      'imageUrls': imageUrls,
+      'imagePublicIds': imagePublicIds,
     });
 
-    return PostModel(
-      postId: post.postId,
-      userId: post.userId,
-      username: post.username,
-      userAvatarUrl: post.userAvatarUrl,
-      isSuperUser: post.isSuperUser,
-      title: post.title,
-      description: post.description,
-      location: post.location,
-      lat: post.lat,
-      lng: post.lng,
-      category: post.category,
-      localTips: post.localTips,
-      recommendedDishes: post.recommendedDishes,
-      imageUrl: imageUrl,
-      imagePublicId: imagePublicId,
-      upvotes: post.upvotes,
-      downvotes: post.downvotes,
-      upvotedBy: post.upvotedBy,
-      commentCount: post.commentCount,
-      createdAt: post.createdAt,
+    return post.copyWith(
+      imageUrl: firstUrl,
+      imagePublicId: firstId,
+      imageUrls: imageUrls,
+      imagePublicIds: imagePublicIds,
     );
   }
 
@@ -117,21 +106,25 @@ class PostsRepo {
     return posts;
   }
 
-  Future<PostModel> createPost(PostModel post, File? imageFile) async {
+  Future<PostModel> createPost(PostModel post, List<File> imageFiles) async {
     final ref = _db.collection('posts').doc();
-    String imageUrl = post.imageUrl;
-    String imagePublicId = post.imagePublicId;
+    List<String> imageUrls = [];
+    List<String> imagePublicIds = [];
 
-    if (imageFile != null) {
-      final result = await _cloudinary.uploadImage(imageFile);
-      imageUrl = result.imageUrl;
-      imagePublicId = result.imagePublicId;
+    if (imageFiles.isNotEmpty) {
+      final results = await _cloudinary.uploadImages(imageFiles);
+      imageUrls = results.map((r) => r.imageUrl).toList();
+      imagePublicIds = results.map((r) => r.imagePublicId).toList();
     }
 
     final newPost = post.copyWith(
-        postId: ref.id, imageUrl: imageUrl, imagePublicId: imagePublicId);
-    final data = newPost.toMap();
-    await ref.set(data);
+      postId: ref.id,
+      imageUrl: imageUrls.isNotEmpty ? imageUrls.first : '',
+      imagePublicId: imagePublicIds.isNotEmpty ? imagePublicIds.first : '',
+      imageUrls: imageUrls,
+      imagePublicIds: imagePublicIds,
+    );
+    await ref.set(newPost.toMap());
     await _userRepo.addKarma(post.userId, 10);
     return newPost;
   }
@@ -186,11 +179,24 @@ class PostsRepo {
     await batch.commit();
   }
 
+  Future<void> removeUpvote(String postId, String voterName) async {
+    await _db.collection('posts').doc(postId).update({
+      'upvotes': FieldValue.increment(-1),
+      'upvotedBy': FieldValue.arrayRemove([voterName]),
+    });
+  }
+
   Future<void> downvotePost(String postId) async {
     await _db
         .collection('posts')
         .doc(postId)
         .update({'downvotes': FieldValue.increment(1)});
+  }
+
+  Future<void> removeDownvote(String postId) async {
+    await _db.collection('posts').doc(postId).update({
+      'downvotes': FieldValue.increment(-1),
+    });
   }
 
   Future<void> savePost(String userId, String postId) async {
@@ -233,8 +239,16 @@ class PostsRepo {
   Future<List<PostModel>> getSavedPosts(String userId) async {
     final ids = await getSavedPostIds(userId);
     if (ids.isEmpty) return [];
-    final posts = await Future.wait(ids.map((id) => getPost(id)));
-    return posts.whereType<PostModel>().toList();
+    // Batch reads with whereIn (max 30 per query) instead of N individual reads
+    final chunks = <List<String>>[];
+    for (var i = 0; i < ids.length; i += 30) {
+      chunks.add(ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30));
+    }
+    final results = await Future.wait(chunks.map((chunk) =>
+        _db.collection('posts').where(FieldPath.documentId, whereIn: chunk).get()));
+    return results
+        .expand((snap) => snap.docs.map((d) => PostModel.fromMap(d.data(), d.id)))
+        .toList();
   }
 
   // Comments

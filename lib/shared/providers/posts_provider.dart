@@ -160,6 +160,62 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> removeUpvote(String postId, String voterName) async {
+    final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (postIndex != -1) {
+      final post = _feedPosts[postIndex];
+      final updatedUpvoters = List<String>.from(post.upvotedBy)..remove(voterName);
+      _feedPosts = List<PostModel>.from(_feedPosts);
+      _feedPosts[postIndex] = post.copyWith(
+        upvotes: (post.upvotes - 1).clamp(0, 999999),
+        upvotedBy: updatedUpvoters,
+      );
+      notifyListeners();
+    }
+    try {
+      await _repo.removeUpvote(postId, voterName);
+      return true;
+    } catch (e) {
+      if (postIndex != -1) {
+        final post = _feedPosts[postIndex];
+        final revertedUpvoters = List<String>.from(post.upvotedBy)..add(voterName);
+        _feedPosts = List<PostModel>.from(_feedPosts);
+        _feedPosts[postIndex] = post.copyWith(
+          upvotes: post.upvotes + 1,
+          upvotedBy: revertedUpvoters,
+        );
+        notifyListeners();
+      }
+      _error = e.toString();
+      return false;
+    }
+  }
+
+  Future<bool> removeDownvote(String postId) async {
+    final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (postIndex != -1) {
+      final post = _feedPosts[postIndex];
+      _feedPosts = List<PostModel>.from(_feedPosts);
+      _feedPosts[postIndex] = post.copyWith(
+        downvotes: (post.downvotes - 1).clamp(0, 999999),
+      );
+      notifyListeners();
+    }
+    try {
+      await _repo.removeDownvote(postId);
+      return true;
+    } catch (e) {
+      if (postIndex != -1) {
+        final post = _feedPosts[postIndex];
+        _feedPosts = List<PostModel>.from(_feedPosts);
+        _feedPosts[postIndex] = post.copyWith(downvotes: post.downvotes + 1);
+        notifyListeners();
+      }
+      _error = e.toString();
+      return false;
+    }
+  }
+
   Future<bool> downvotePost(String postId) async {
     final postIndex = _feedPosts.indexWhere((p) => p.postId == postId);
     if (postIndex != -1) {

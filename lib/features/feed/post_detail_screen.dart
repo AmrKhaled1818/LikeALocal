@@ -105,27 +105,50 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  bool _voting = false;
+
   Future<void> _handleVote(int vote, PostModel post, AuthProvider auth) async {
-    if (auth.uid.isEmpty) return;
-    if (_userVote == vote) {
-      setState(() => _userVote = null);
-      return;
-    }
+    if (_voting || auth.uid.isEmpty) return;
+    _voting = true;
     HapticFeedback.mediumImpact();
-    setState(() => _userVote = vote);
-    final pp = context.read<PostsProvider>();
-    final bool ok;
-    if (vote == 1) {
-      ok = await pp.upvotePost(post.postId, auth.uid, post.userId,
-          auth.userModel?.username ?? 'User');
-    } else {
-      ok = await pp.downvotePost(post.postId);
-    }
-    if (!ok && mounted) {
-      setState(() => _userVote = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not register vote. Try again.')),
-      );
+    try {
+      final prevVote = _userVote;
+      final voterName = auth.userModel?.username ?? 'User';
+      final pp = context.read<PostsProvider>();
+
+      if (prevVote == vote) {
+        // Un-vote
+        setState(() => _userVote = null);
+        if (vote == 1) {
+          await pp.removeUpvote(post.postId, voterName);
+        } else {
+          await pp.removeDownvote(post.postId);
+        }
+        return;
+      }
+
+      // Remove previous vote before applying new one
+      if (prevVote == 1) {
+        await pp.removeUpvote(post.postId, voterName);
+      } else if (prevVote == -1) {
+        await pp.removeDownvote(post.postId);
+      }
+
+      setState(() => _userVote = vote);
+      final bool ok;
+      if (vote == 1) {
+        ok = await pp.upvotePost(post.postId, auth.uid, post.userId, voterName);
+      } else {
+        ok = await pp.downvotePost(post.postId);
+      }
+      if (!ok && mounted) {
+        setState(() => _userVote = prevVote);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not register vote. Try again.')),
+        );
+      }
+    } finally {
+      _voting = false;
     }
   }
 
