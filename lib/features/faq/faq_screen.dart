@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
 
 class FaqScreen extends StatelessWidget {
   const FaqScreen({super.key});
@@ -18,7 +19,9 @@ class FaqScreen extends StatelessWidget {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
-      body: ListView(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxFormWidth,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: const [
           _Section(
@@ -76,6 +79,7 @@ class FaqScreen extends StatelessWidget {
                 'Great posts are specific — mention what makes the place special, the best time to visit, what to order, or how to find the entrance. Quality posts earn more upvotes and karma.',
           ),
         ],
+        ),
       ),
     );
   }

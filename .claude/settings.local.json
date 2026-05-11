@@ -63,7 +63,26 @@
       "Bash(grep -v '.dart_tool\\\\|.git\\\\|build\\\\|\\\\.dart$')",
       "Bash(xargs -I{} grep -l \"cached_network_image\" {})",
       "Bash(sed -n '237,243p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)",
-      "Bash(sed -n '817,825p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)"
+      "Bash(sed -n '817,825p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://firestore.googleapis.com/v1/projects/likealocal-73fbf/databases\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyBYV2tspaViHpX42SQhAEpRLz7rFzteOHU\" -X POST -d '{}' -H \"Content-Type: application/json\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(git -C /mnt/c/Users/Dell/Desktop/Mobile_Project log --oneline --all -- lib/core/constants/app_config.dart)",
+      "Bash(git -C /mnt/c/Users/Dell/Desktop/Mobile_Project log --oneline --all -- lib/firebase_options.dart)",
+      "Bash(git -C /mnt/c/Users/Dell/Desktop/Mobile_Project log --oneline -5)",
+      "Bash(git -C /mnt/c/Users/Dell/Desktop/Mobile_Project show --stat HEAD)",
+      "Bash(git -C /mnt/c/Users/Dell/Desktop/Mobile_Project log --all --full-history -- lib/core/constants/app_config.dart)",
+      "Bash(git -C /mnt/c/Users/Dell/Desktop/Mobile_Project log --all --full-history -- lib/firebase_options.dart)",
+      "Bash(git *)",
+      "Bash(xargs '-I{}' python3 -c ' *)",
+      "Bash(flutter.bat analyze *)",
+      "Bash(flutter doctor *)",
+      "Bash(flutter.bat --version)",
+      "Bash(grep -n \"^        \\),$\\\\|^      \\),$\\\\|^    \\),$\\\\|^  \\),$\\\\|^        \\);$\\\\|^      \\);$\\\\|^    \\);$\\\\|^  \\);\" /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/auth/login_screen.dart)",
+      "Bash(/mnt/c/flutter/bin/dart.bat analyze *)",
+      "Read(//usr/local/bin/**)",
+      "Read(//home/reverz/flutter/bin/**)",
+      "Read(//home/**)"
     ]
   }
 }

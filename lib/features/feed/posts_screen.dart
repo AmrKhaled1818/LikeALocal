@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/post_model.dart';
 import '../../shared/providers/posts_provider.dart';
+import '../../core/utils/responsive.dart';
 import '../../shared/widgets/error_retry.dart';
 import '../../shared/widgets/post_card.dart';
 
@@ -16,8 +18,12 @@ class PostsScreen extends StatefulWidget {
   State<PostsScreen> createState() => _PostsScreenState();
 }
 
-class _PostsScreenState extends State<PostsScreen> {
+class _PostsScreenState extends State<PostsScreen>
+    with AutomaticKeepAliveClientMixin {
   final _scrollCtrl = ScrollController();
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -39,23 +45,39 @@ class _PostsScreenState extends State<PostsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PostsProvider>(
-      builder: (context, posts, _) {
-        if (posts.isLoading) {
-          return _buildShimmer();
-        }
-        if (posts.error != null && posts.feedPosts.isEmpty) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
+
+    return Selector<PostsProvider, (bool, String?)>(
+      selector: (_, p) => (p.isLoading, p.error),
+      builder: (context, state, _) {
+        final (isLoading, error) = state;
+        if (isLoading) return _buildShimmer();
+        if (error != null &&
+            context.read<PostsProvider>().feedPosts.isEmpty) {
           return ErrorRetryWidget(
-            message: posts.error!,
-            onRetry: posts.refresh,
+            message: error,
+            onRetry: context.read<PostsProvider>().refresh,
           );
         }
+        return ResponsiveBody(
+          maxWidth: AppBreakpoints.maxFeedWidth,
+          child: _buildFeed(context),
+        );
+      },
+    );
+  }
+
+  Widget _buildFeed(BuildContext context) {
+    return Selector<PostsProvider, (List<PostModel>, bool, bool)>(
+      selector: (_, p) => (p.feedPosts, p.isLoadingMore, p.hasMore),
+      builder: (context, data, _) {
+        final (feedPosts, isLoadingMore, hasMore) = data;
+        final posts = context.read<PostsProvider>();
         return RefreshIndicator(
           color: kOrange,
           onRefresh: () async {
             HapticFeedback.lightImpact();
             posts.refresh();
-            // Use a Completer instead of a polling loop
             final completer = Completer<void>();
             void check() {
               if (!posts.isLoading) {
@@ -64,7 +86,6 @@ class _PostsScreenState extends State<PostsScreen> {
               }
             }
             posts.addListener(check);
-            // Safety timeout
             Future.delayed(const Duration(seconds: 15), () {
               if (!completer.isCompleted) completer.complete();
             });
@@ -72,13 +93,14 @@ class _PostsScreenState extends State<PostsScreen> {
           },
           child: CustomScrollView(
             controller: _scrollCtrl,
+            cacheExtent: 500,
             slivers: [
-              SliverToBoxAdapter(
+              const SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
                         'Hidden Gems Feed',
                         style: TextStyle(
@@ -95,28 +117,28 @@ class _PostsScreenState extends State<PostsScreen> {
                   ),
                 ),
               ),
-              if (posts.feedPosts.isEmpty)
-                SliverFillRemaining(
-                  child: _EmptyFeedState(),
-                )
+              if (feedPosts.isEmpty)
+                SliverFillRemaining(child: _EmptyFeedState())
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, i) => Padding(
+                        key: ValueKey(feedPosts[i].postId),
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: PostCard(post: posts.feedPosts[i]),
+                        child: RepaintBoundary(
+                          child: PostCard(post: feedPosts[i]),
+                        ),
                       ),
-                      childCount: posts.feedPosts.length,
+                      childCount: feedPosts.length,
                     ),
                   ),
                 ),
-              // Pagination footer
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: posts.isLoadingMore
+                  child: isLoadingMore
                       ? const Center(
                           child: SizedBox(
                             width: 24,
@@ -125,12 +147,12 @@ class _PostsScreenState extends State<PostsScreen> {
                                 color: kOrange, strokeWidth: 2),
                           ),
                         )
-                      : !posts.hasMore && posts.feedPosts.isNotEmpty
+                      : !hasMore && feedPosts.isNotEmpty
                           ? const Center(
                               child: Text(
-                                'You\'ve seen everything!',
-                                style:
-                                    TextStyle(color: kMutedFg, fontSize: 13),
+                                "You've seen everything!",
+                                style: TextStyle(
+                                    color: kMutedFg, fontSize: 13),
                               ),
                             )
                           : const SizedBox(height: 80),
@@ -237,9 +259,7 @@ class _EmptyFeedState extends StatelessWidget {
             const Text(
               'No posts yet!',
               style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: null),
+                  fontSize: 20, fontWeight: FontWeight.bold, color: null),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -253,8 +273,8 @@ class _EmptyFeedState extends StatelessWidget {
               icon: const Icon(Icons.add_location_alt_outlined, size: 18),
               label: const Text('Add a Place'),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               ),
             ),
           ],

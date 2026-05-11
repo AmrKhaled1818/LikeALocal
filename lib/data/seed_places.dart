@@ -67,6 +67,24 @@ class SeedPlaces {
       _createSeedPost(postId: 'seed_walk_of_cairo', title: 'Walk of Cairo (WOC)', description: 'An open-air lifestyle destination blending shopping, dining, and green promenade spaces with interactive art installations.', localTips: 'Look out for the Museum of Illusions located here, and take a photo with the giant gorilla statue.', imageUrl: 'https://walkofcairo.com/images/promenade.jpg', location: 'Cairo-Alexandria Desert Road, Sheikh Zayed City', lat: 30.0450, lng: 30.9650, category: 'Park'),
       _createSeedPost(postId: 'seed_point_90', title: 'Point 90 Mall', description: 'A lively mall popular with the university crowd, featuring a large multiplex cinema, fashion retailers, and a wide array of eateries.', localTips: 'The Point 90 Cinema is one of the best in New Cairo. The mall gets very busy around the time university classes let out.', imageUrl: 'https://point90mall.com/images/facade.jpg', location: 'South 90th Street (Facing AUC), New Cairo', lat: 30.0189, lng: 31.4981, category: 'Shop'),
       _createSeedPost(postId: 'seed_qahwa', title: 'Qahwa', description: 'A popular local cafe chain known for its vibrant atmosphere, hearty breakfast options, and excellent traditional and modern coffee.', localTips: 'Their breakfast menu is phenomenal — especially the eggs benedict and pancakes. It gets crowded on Friday mornings.', imageUrl: 'https://qahwa-eg.com/images/waterway-branch.jpg', location: 'The Waterway, Fifth Settlement, New Cairo', lat: 30.0390, lng: 31.4560, category: 'Café'),
+      // Sponsored content example
+      PostModel(
+        postId: 'seed_sponsored_kempinski',
+        userId: _seedUserId,
+        username: _seedUsername,
+        userAvatarUrl: _seedAvatar,
+        isSuperUser: true,
+        isSponsoredContent: true,
+        title: 'Kempinski Nile Hotel — Rooftop Experience',
+        description: 'Enjoy an exclusive rooftop dining experience at the Kempinski Nile Hotel with breathtaking views of the Nile and the Cairo skyline.',
+        localTips: 'Book the sunset time slot for the best views. The pool bar is open to non-guests with a minimum spend.',
+        imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1400&q=80',
+        location: 'Garden City, Cairo',
+        lat: 30.0348,
+        lng: 31.2253,
+        category: 'Restaurant',
+        createdAt: Timestamp.now(),
+      ),
 
     ];
   }

@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/place_group.dart';
 import '../../data/models/post_model.dart';
 import '../../data/repositories/user_repo.dart';
 import '../../data/models/user_model.dart';
 import '../../shared/providers/posts_provider.dart';
+import '../../core/utils/responsive.dart';
 import '../../shared/widgets/post_card.dart';
+import 'place_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -18,7 +21,9 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _searchCtrl = TextEditingController();
   final _focusNode = FocusNode();
   late TabController _tabCtrl;
@@ -141,6 +146,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin
     return GestureDetector(
       onTap: () {
         _focusNode.unfocus();
@@ -148,16 +154,19 @@ class _SearchScreenState extends State<SearchScreen>
       },
       child: Scaffold(
         body: SafeArea(
-          child: Column(
-            children: [
-              _buildSearchHeader(),
-              if (_query.isNotEmpty) _buildTabs(),
-              Expanded(
-                child: _query.isEmpty
-                    ? _buildDiscovery()
-                    : _buildResults(),
-              ),
-            ],
+          child: ResponsiveBody(
+            maxWidth: AppBreakpoints.maxFeedWidth,
+            child: Column(
+              children: [
+                _buildSearchHeader(),
+                if (_query.isNotEmpty) _buildTabs(),
+                Expanded(
+                  child: _query.isEmpty
+                      ? _buildDiscovery()
+                      : _buildResults(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -206,7 +215,9 @@ class _SearchScreenState extends State<SearchScreen>
                 ),
                 if (suggestions.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Container(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: Container(
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(10),
@@ -219,14 +230,15 @@ class _SearchScreenState extends State<SearchScreen>
                         ),
                       ],
                     ),
-                    child: Column(
+                    child: SingleChildScrollView(
+                      child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: suggestions.map((post) {
                         return InkWell(
                           onTap: () {
-                            _searchCtrl.text = post.title;
-                            _runSearch(post.title);
                             _focusNode.unfocus();
+                            setState(() => _showSuggestions = false);
+                            context.push('/post/${post.postId}');
                           },
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -276,6 +288,8 @@ class _SearchScreenState extends State<SearchScreen>
                         );
                       }).toList(),
                     ),
+                    ),
+                  ),
                   ),
                 ],
               ],
@@ -487,7 +501,7 @@ class _SearchScreenState extends State<SearchScreen>
   }
 }
 
-// ── Place results ────────────────────────────────────────────────────────────
+// ── Place results (grouped by place) ─────────────────────────────────────────
 
 class _PlaceResults extends StatelessWidget {
   final String query;
@@ -504,10 +518,9 @@ class _PlaceResults extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PostsProvider>(
       builder: (context, posts, _) {
-        final results =
-            posts.feedPosts.where((p) => matcher(p, query)).toList();
+        final matched = posts.feedPosts.where((p) => matcher(p, query)).toList();
 
-        if (results.isEmpty) {
+        if (matched.isEmpty) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -530,192 +543,294 @@ class _PlaceResults extends StatelessWidget {
           );
         }
 
+        final groups = PlaceGroup.groupPosts(matched);
+
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: results.length,
-          itemBuilder: (_, i) {
-            final post = results[i];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          itemCount: groups.length,
+          itemBuilder: (_, i) => _PlaceGroupCard(group: groups[i]),
+        );
+      },
+    );
+  }
+}
+
+// ── Place group card ──────────────────────────────────────────────────────────
+
+class _PlaceGroupCard extends StatelessWidget {
+  final PlaceGroup group;
+  const _PlaceGroupCard({required this.group});
+
+  void _openDetail(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlaceDetailScreen(group: group),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rep = group.representative;
+    final coverUrl = group.coverImageUrl;
+    final hasMultiple = group.postCount > 1;
+
+    return GestureDetector(
+      onTap: () => _openDetail(context),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cover image
+            if (coverUrl.isNotEmpty)
+              Stack(
                 children: [
-                  if (post.imageUrl.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(12)),
-                      child: CachedNetworkImage(
-                        imageUrl: post.imageUrl,
-                        height: 120,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(
-                          height: 120,
-                          color: kMuted,
-                          child: const Icon(
-                              Icons.image_not_supported_outlined,
-                              color: kMutedFg),
+                  ClipRRect(
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(14)),
+                    child: CachedNetworkImage(
+                      imageUrl: coverUrl,
+                      height: 130,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        height: 130,
+                        color: kMuted,
+                        child: const Icon(Icons.image_not_supported_outlined,
+                            color: kMutedFg),
+                      ),
+                    ),
+                  ),
+                  if (hasMultiple)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${group.postCount} posts',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                    child: Row(
+                ],
+              ),
+
+            // Title + location + category
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: kOrange.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child:
+                        const Icon(Icons.place, color: kOrange, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: kOrange.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.place,
-                              color: kOrange, size: 20),
+                        Text(
+                          group.displayTitle,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                post.title,
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined,
+                                size: 12, color: kMutedFg),
+                            const SizedBox(width: 3),
+                            Expanded(
+                              child: Text(
+                                group.location,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14),
+                                    color: kMutedFg, fontSize: 12),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              Row(
-                                children: [
-                                  const Icon(Icons.location_on_outlined,
-                                      size: 12, color: kMutedFg),
-                                  const SizedBox(width: 3),
-                                  Expanded(
-                                    child: Text(
-                                      post.location,
-                                      style: const TextStyle(
-                                          color: kMutedFg, fontSize: 12),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: kOrange.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            post.category,
-                            style: const TextStyle(
-                                color: kOrange,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600),
-                          ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  if (post.description.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-                      child: Text(
-                        post.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            const TextStyle(color: kMutedFg, fontSize: 13),
-                      ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: kOrange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  if (post.localTips.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.lightbulb_outline,
-                              size: 14, color: kAmber),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              post.localTips,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: null,
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () =>
-                                context.go('/map?focusPostId=${post.postId}'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: kOrange,
-                              foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon:
-                                const Icon(Icons.map_outlined, size: 16),
-                            label: const Text('Show on Map',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () =>
-                                context.push('/post/${post.postId}'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: kDark,
-                              side: const BorderSide(color: kOrange),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: const Icon(Icons.info_outline,
-                                size: 16, color: kOrange),
-                            label: const Text('View Details',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500)),
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      group.category,
+                      style: const TextStyle(
+                          color: kOrange,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
               ),
-            );
-          },
-        );
-      },
+            ),
+
+            // Stats row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Row(
+                children: [
+                  const Icon(Icons.arrow_upward,
+                      size: 13, color: kOrange),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${group.totalUpvotes}',
+                    style: const TextStyle(
+                        color: kOrange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.comment_outlined,
+                      size: 13, color: kMutedFg),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${group.totalComments} reviews',
+                    style: const TextStyle(
+                        color: kMutedFg, fontSize: 12),
+                  ),
+                  if (hasMultiple) ...[
+                    const SizedBox(width: 12),
+                    const Icon(Icons.people_outline,
+                        size: 13, color: kMutedFg),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${group.postCount} locals posted',
+                      style: const TextStyle(
+                          color: kMutedFg, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Description from representative post
+            if (rep.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                child: Text(
+                  rep.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: kMutedFg, fontSize: 13),
+                ),
+              ),
+
+            // Tip
+            if (rep.localTips.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.lightbulb_outline,
+                        size: 13, color: kAmber),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        rep.localTips,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: kMutedFg,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Action buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () =>
+                          context.go('/map?focusPostId=${rep.postId}'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kOrange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.map_outlined, size: 16),
+                      label: const Text('Show on Map',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openDetail(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kDark,
+                        side: const BorderSide(color: kOrange),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.reviews_outlined,
+                          size: 16, color: kOrange),
+                      label: Text(
+                        hasMultiple ? 'All Reviews' : 'View Details',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

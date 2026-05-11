@@ -61,6 +61,10 @@ class UserProvider extends ChangeNotifier {
     await _repo.updateChatSchedule(_currentUser!.uid, schedule);
   }
 
+  Future<void> updateField(String uid, Map<String, dynamic> fields) async {
+    await _repo.updateUser(uid, fields);
+  }
+
   Future<UserModel?> getUser(String uid) async {
     return await _repo.getUser(uid);
   }

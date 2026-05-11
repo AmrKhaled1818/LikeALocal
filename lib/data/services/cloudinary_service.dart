@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cloudinary_public/cloudinary_public.dart';
+import '../../core/constants/app_config.dart';
 
 class CloudinaryUploadResult {
   final String imageUrl;
@@ -13,11 +14,16 @@ class CloudinaryUploadResult {
 }
 
 class CloudinaryService {
-  static const String _cloudName = 'ddcajjlfg';
-  static const String _uploadPreset = 'likealocal_unsigned';
+  static const String _cloudName = AppConfig.cloudinaryCloudName;
+  static const String _uploadPreset = AppConfig.cloudinaryUploadPreset;
 
   Future<CloudinaryUploadResult> uploadImage(File imageFile) async {
     return _upload(imageFile, 'likealocal/posts');
+  }
+
+  /// Upload multiple images concurrently. Returns results in the same order.
+  Future<List<CloudinaryUploadResult>> uploadImages(List<File> files) async {
+    return Future.wait(files.map((f) => _upload(f, 'likealocal/posts')));
   }
 
   Future<CloudinaryUploadResult> uploadAvatar(File imageFile) async {
@@ -27,6 +33,11 @@ class CloudinaryService {
   Future<CloudinaryUploadResult> _upload(File imageFile, String folder) async {
     if (!await imageFile.exists()) {
       throw Exception('Selected image file does not exist.');
+    }
+
+    if (_cloudName.isEmpty || _uploadPreset.isEmpty) {
+      throw Exception(
+          'Cloudinary config is missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET.');
     }
 
     final cloudinary = CloudinaryPublic(_cloudName, _uploadPreset, cache: false);

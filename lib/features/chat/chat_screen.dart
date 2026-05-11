@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/user_repo.dart';
 import '../../shared/providers/auth_provider.dart';
@@ -17,7 +18,10 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _searchCtrl = TextEditingController();
   String _query = '';
   bool _sidebarOpen = false;
@@ -41,16 +45,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin
     return Stack(
       children: [
         Scaffold(
-          body: SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                _buildSearchBar(),
-                Expanded(child: _buildChatList()),
-              ],
+          body: ResponsiveBody(
+            maxWidth: AppBreakpoints.maxFeedWidth,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  _buildSearchBar(),
+                  Expanded(child: _buildChatList()),
+                ],
+              ),
             ),
           ),
         ),

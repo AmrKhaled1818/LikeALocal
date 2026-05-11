@@ -7,7 +7,7 @@ import '../models/user_model.dart';
 class AuthRepo {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  GoogleSignIn? _googleSignIn;
 
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -44,7 +44,9 @@ class AuthRepo {
     }
 
     // Mobile flow — uses google_sign_in package
-    final googleUser = await _googleSignIn.signIn();
+    final googleSignIn =
+        _googleSignIn ??= GoogleSignIn(scopes: ['email', 'profile']);
+    final googleUser = await googleSignIn.signIn();
     if (googleUser == null) throw Exception('Google sign-in cancelled');
     final googleAuth = await googleUser.authentication;
     final credential = GoogleAuthProvider.credential(
@@ -61,8 +63,8 @@ class AuthRepo {
   }
 
   Future<void> signOut() async {
-    if (!kIsWeb) {
-      await _googleSignIn.signOut();
+    if (!kIsWeb && _googleSignIn != null) {
+      await _googleSignIn!.signOut();
     }
     await _auth.signOut();
   }

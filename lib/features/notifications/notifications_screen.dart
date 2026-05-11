@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
 import '../../data/models/message_model.dart';
 import '../../shared/providers/auth_provider.dart';
 
@@ -36,7 +37,9 @@ class NotificationsScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxFeedWidth,
+        child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('notifications')
             .where('userId', isEqualTo: auth.uid)
@@ -90,6 +93,7 @@ class NotificationsScreen extends StatelessWidget {
                 _NotificationTile(notif: notifications[i]),
           );
         },
+        ),
       ),
     );
   }

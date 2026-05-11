@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
 import '../../shared/providers/auth_provider.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -60,61 +61,72 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final isLast = _page == _slides.length - 1;
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: ResponsiveBody(
+              maxWidth: AppBreakpoints.maxFormWidth,
+              child: Column(
+                children: [
+                  const SizedBox(height: 44), // space for skip button
+                  Expanded(
+                    child: PageView.builder(
+                      controller: _pageCtrl,
+                      onPageChanged: (i) => setState(() => _page = i),
+                      itemCount: _slides.length,
+                      itemBuilder: (_, i) => _OnboardingSlide(data: _slides[i]),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(_slides.length, (i) {
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: _page == i ? 28 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _page == i ? kOrange : kMuted,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 32),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isLast
+                            ? _finish
+                            : () => _pageCtrl.nextPage(
+                                  duration: const Duration(milliseconds: 350),
+                                  curve: Curves.easeInOut,
+                                ),
+                        child: Text(isLast ? 'Get Started' : 'Next',
+                            style: const TextStyle(fontSize: 15)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                ],
+              ),
+            ),
+          ),
+          // Skip always anchored to real top-right of screen, never constrained
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
               child: TextButton(
                 onPressed: _finish,
                 child: const Text('Skip',
                     style: TextStyle(color: kMutedFg, fontSize: 14)),
               ),
             ),
-            Expanded(
-              child: PageView.builder(
-                controller: _pageCtrl,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemCount: _slides.length,
-                itemBuilder: (_, i) => _OnboardingSlide(data: _slides[i]),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_slides.length, (i) {
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: _page == i ? 28 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _page == i ? kOrange : kMuted,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 32),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: isLast
-                      ? _finish
-                      : () => _pageCtrl.nextPage(
-                            duration: const Duration(milliseconds: 350),
-                            curve: Curves.easeInOut,
-                          ),
-                  child: Text(isLast ? 'Get Started' : 'Next',
-                      style: const TextStyle(fontSize: 15)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

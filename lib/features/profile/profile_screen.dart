@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import '../../shared/providers/user_provider.dart';
@@ -66,28 +68,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (picked == null || !mounted) return;
       final auth = context.read<AuthProvider>();
       final userProvider = context.read<UserProvider>();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Uploading photo...'), duration: Duration(seconds: 60)),
-        );
-      }
+      AppToast.info('Uploading photo...');
       await userProvider.updateAvatar(auth.uid, File(picked.path));
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile photo updated!'), backgroundColor: Colors.green),
-        );
-      }
+      AppToast.success('Profile photo updated!');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to upload photo: ${e.toString().replaceFirst("Exception: ", "")}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      AppToast.error('Failed to upload photo: ${e.toString().replaceFirst("Exception: ", "")}');
     }
   }
 
@@ -119,7 +104,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ],
       ),
-      body: NestedScrollView(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxDetailWidth,
+        child: NestedScrollView(
         headerSliverBuilder: (_, __) => [
           SliverToBoxAdapter(child: _buildProfileHeader(user, progress, remaining)),
           SliverPersistentHeader(
@@ -144,6 +131,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             _buildPostsTab(_userPosts),
             _buildSavedTab(_savedPosts, user.isSuperUser),
           ],
+        ),
         ),
       ),
     );
@@ -509,13 +497,18 @@ class _ProfileScreenState extends State<ProfileScreen>
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              final userProvider = context.read<UserProvider>();
-              await userProvider.updateProfile(
-                auth.uid,
-                username: usernameCtrl.text.trim(),
-                bio: bioCtrl.text.trim(),
-                location: locationCtrl.text.trim(),
-              );
+              try {
+                final userProvider = context.read<UserProvider>();
+                await userProvider.updateProfile(
+                  auth.uid,
+                  username: usernameCtrl.text.trim(),
+                  bio: bioCtrl.text.trim(),
+                  location: locationCtrl.text.trim(),
+                );
+                AppToast.success('Profile updated!');
+              } catch (e) {
+                AppToast.error('Failed to update profile. Try again.');
+              }
             },
             child: const Text('Save'),
           ),

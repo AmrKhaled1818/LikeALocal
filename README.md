@@ -89,6 +89,26 @@ lib/
    flutter run
    ```
 
+### Runtime API Config (Optional Overrides)
+
+The project includes working default config values, so a fresh clone can run with just:
+
+```bash
+flutter run
+```
+
+If you want to use your own keys/models, pass `--dart-define` values:
+
+```bash
+flutter run \
+  --dart-define=OPENROUTER_API_KEY=your_key \
+  --dart-define=OPENROUTER_MODEL=openai/gpt-oss-20b:free \
+  --dart-define=OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 \
+  --dart-define=STADIA_API_KEY=your_stadia_key \
+  --dart-define=CLOUDINARY_CLOUD_NAME=your_cloud_name \
+  --dart-define=CLOUDINARY_UPLOAD_PRESET=your_unsigned_preset
+```
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

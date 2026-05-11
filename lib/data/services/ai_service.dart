@@ -9,6 +9,10 @@ class AIService {
   Future<String> getAIResponse(
       List<MessageModel> history, UserModel currentUser,
       {double? lat, double? lng, String? availablePlaces}) async {
+    if (!AppConfig.hasAiKey) {
+      return 'AI is not configured yet. Please set OPENROUTER_API_KEY.';
+    }
+
     final prefs = currentUser.preferences;
     final favCats = (prefs['favCategories'] as List?)?.join(', ') ?? '';
     final locationText = (lat != null && lng != null)
@@ -19,14 +23,19 @@ class AIService {
         : '';
 
     final systemText =
-        'You are the AI Assistant for LikeALocal. '
-        'User preferences: budget=${prefs['budget'] ?? 'any'}, '
-        'atmosphere=${prefs['atmosphere'] ?? 'any'}, '
-        'favorite categories=$favCats.$locationText$placesText\n'
-        'CRITICAL RULES:\n'
-        '1. Be extremely concise. Do not talk a lot. Give short, direct answers.\n'
-        '2. Always suggest exactly ONE specific good place based on the request.\n'
-        '3. Clearly state the place name and location (e.g. "Place Name in City Name").';
+        'You are the AI Discovery Assistant for LikeALocal, a hidden-gems social app. '
+        'You help users find hidden gems and local spots.\n'
+        'User preferences — budget: ${prefs['budget'] ?? 'any'}, '
+        'atmosphere: ${prefs['atmosphere'] ?? 'any'}, '
+        'favorite categories: ${favCats.isNotEmpty ? favCats : 'any'}.$locationText\n'
+        '${placesText.isNotEmpty ? 'Places available in the app: $placesText\n' : ''}'
+        'HOW TO BEHAVE:\n'
+        '- For greetings (hi, hello, hey, thanks, etc.): respond warmly in one sentence and ask what kind of place they are looking for.\n'
+        '- For recommendation requests: suggest 2-3 places. Format each as: **Place Name** — Location: one-line reason.\n'
+        '- For vague requests: ask ONE short clarifying question (area, occasion, or type of place).\n'
+        '- For non-recommendation questions: answer helpfully and concisely.\n'
+        '- Prefer places from the app list. Only suggest outside places if nothing fits.\n'
+        '- Keep responses under 6 lines. No bullet points for greetings. NEVER narrate your reasoning.';
 
     // Build message history — drop leading AI messages, keep last 10
     var recent = history.takeLast(10);
@@ -64,7 +73,7 @@ class AIService {
               'HTTP-Referer': 'https://likealocal.app',
               'X-Title': 'LikeALocal',
             }, body: body)
-            .timeout(const Duration(seconds: 20));
+            .timeout(const Duration(seconds: 45));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -108,6 +117,58 @@ class AIService {
     }
 
     return 'Sorry, I\'m having trouble right now. Please try again.';
+  }
+
+  Future<String> generatePostSummary({
+    required String title,
+    required String category,
+    required String description,
+    required String localTips,
+  }) async {
+    if (!AppConfig.hasAiKey) return '';
+
+    final prompt =
+        'Write exactly 2 friendly sentences summarising this hidden gem for the LikeALocal app. '
+        'Be warm, specific, and helpful. Do NOT use bullet points or markdown.\n\n'
+        'Place: $title ($category)\n'
+        'Description: $description\n'
+        '${localTips.isNotEmpty ? 'Local Tips: $localTips' : ''}';
+
+    final body = jsonEncode({
+      'model': AppConfig.aiModel,
+      'messages': [
+        {'role': 'user', 'content': prompt},
+      ],
+      'temperature': 0.5,
+      'max_tokens': 120,
+    });
+
+    final url = Uri.parse('${AppConfig.apiBaseUrl}/chat/completions');
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final response = await http
+            .post(url, headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${AppConfig.openRouterKey}',
+              'HTTP-Referer': 'https://likealocal.app',
+              'X-Title': 'LikeALocal',
+            }, body: body)
+            .timeout(const Duration(seconds: 45));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final choices = data['choices'] as List?;
+          if (choices != null && choices.isNotEmpty) {
+            return choices[0]['message']['content'] as String? ?? '';
+          }
+        }
+        if (attempt < 3) await Future.delayed(Duration(seconds: attempt));
+      } catch (_) {
+        if (attempt < 3) await Future.delayed(Duration(seconds: attempt));
+      }
+    }
+    return '';
   }
 }
 

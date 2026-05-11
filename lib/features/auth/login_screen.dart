@@ -3,7 +3,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../core/utils/validators.dart';
+import '../../core/utils/responsive.dart';
 import '../../shared/providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -123,7 +125,11 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: AppBreakpoints.maxFormWidth),
+              child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -427,6 +433,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+          ),
+        ),
     );
   }
 
@@ -443,13 +451,8 @@ class _LoginScreenState extends State<LoginScreen> {
           _passwordCtrl.text, _usernameCtrl.text.trim());
     }
 
-    if (!success && mounted && auth.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(auth.errorMessage!),
-          backgroundColor: kDestructive,
-        ),
-      );
+    if (!success && auth.errorMessage != null) {
+      AppToast.error(auth.errorMessage!);
     }
     // GoRouter redirects automatically via auth state
   }
@@ -457,39 +460,22 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _googleSignIn(BuildContext context) async {
     final auth = context.read<AuthProvider>();
     final success = await auth.signInWithGoogle();
-    if (!success && mounted && auth.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(auth.errorMessage!),
-          backgroundColor: kDestructive,
-        ),
-      );
+    if (!success && auth.errorMessage != null) {
+      AppToast.error(auth.errorMessage!);
     }
   }
 
   Future<void> _forgotPassword(BuildContext context) async {
     if (_emailCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter your email above first'),
-          backgroundColor: kDestructive,
-        ),
-      );
+      AppToast.error('Enter your email above first');
       return;
     }
     final auth = context.read<AuthProvider>();
     final success = await auth.resetPassword(_emailCtrl.text.trim());
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Password reset email sent!'
-                : (auth.errorMessage ?? 'Failed to send reset email'),
-          ),
-          backgroundColor: success ? Colors.green : kDestructive,
-        ),
-      );
+    if (success) {
+      AppToast.success('Password reset email sent!');
+    } else {
+      AppToast.error(auth.errorMessage ?? 'Failed to send reset email');
     }
   }
 }

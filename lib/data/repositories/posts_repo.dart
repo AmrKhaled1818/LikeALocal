@@ -179,6 +179,15 @@ class PostsRepo {
     await batch.commit();
   }
 
+  Future<void> updateAiSummary(String postId, String summary) async {
+    try {
+      await _db
+          .collection('posts')
+          .doc(postId)
+          .update({'aiSummary': summary});
+    } catch (_) {}
+  }
+
   Future<void> removeUpvote(String postId, String voterName) async {
     await _db.collection('posts').doc(postId).update({
       'upvotes': FieldValue.increment(-1),

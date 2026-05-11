@@ -5,9 +5,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_utils.dart';
+import '../../core/utils/responsive.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/post_model.dart';
 import '../../data/repositories/user_repo.dart';
@@ -40,6 +41,20 @@ class _ConversationScreenState extends State<ConversationScreen> {
   List<MessageModel> _currentMessages = [];
 
   static const _dailyLimit = 20;
+  static const _genericQueryWords = <String>{
+    // articles / prepositions
+    'a', 'an', 'the', 'in', 'at', 'on', 'for', 'to', 'of', 'and', 'or',
+    'with', 'near', 'around', 'from', 'by', 'up', 'its',
+    // pronouns / helpers
+    'me', 'my', 'i', 'you', 'can', 'could', 'please', 'want', 'need',
+    'get', 'find', 'show', 'give', 'tell', 'like', 'know', 'have', 'has',
+    // greetings / filler
+    'hello', 'hi', 'hey', 'thanks', 'thank', 'okay', 'ok', 'yes', 'no',
+    'sure', 'great', 'good', 'nice', 'cool', 'awesome', 'wow', 'help',
+    // vague place words (too broad to score)
+    'suggest', 'recommend', 'place', 'places', 'spot', 'spots',
+    'local', 'best', 'any', 'some', 'here', 'there', 'area', 'city',
+  };
 
   bool get _isAiChat => widget.chatId.startsWith('ai_');
   bool get _limitReached => _limitLoaded && _todayAiCount >= _dailyLimit;
@@ -157,7 +172,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
       ),
     );
     if (confirmed == true && mounted) {
-      await context.read<ChatProvider>().clearChat(widget.chatId);
+      try {
+        await context.read<ChatProvider>().clearChat(widget.chatId);
+        AppToast.success('Chat cleared.');
+      } catch (_) {
+        AppToast.error('Failed to clear chat. Try again.');
+      }
     }
   }
 
@@ -167,8 +187,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
     final auth = context.read<AuthProvider>();
     final isSuperUser = auth.userModel?.isSuperUser ?? false;
+    final isPremium = auth.userModel?.isPremium ?? false;
 
-    if (_isAiChat && !isSuperUser && _limitReached) return;
+    if (_isAiChat && !isSuperUser && !isPremium && _limitReached) return;
 
     final chatProvider = context.read<ChatProvider>();
     _msgCtrl.clear();
@@ -206,9 +227,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
           createdAt: Timestamp.now(),
         );
         await chatProvider.sendMessage(widget.chatId, aiMsg, 'ai');
-        if (!isSuperUser) await _incrementAiCount(auth.uid);
+        if (!isSuperUser && !isPremium) await _incrementAiCount(auth.uid);
         _scrollToBottom();
       }
+    } catch (e) {
+      AppToast.error('Failed to send message. Try again.');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -216,35 +239,48 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   List<PostModel> _findRelatedPosts(
       String aiText, String userQuery, List<PostModel> allPosts) {
-    final searchText = '${aiText.toLowerCase()} ${userQuery.toLowerCase()}';
+    // User query tokens — primary signal
+    final queryTokens = userQuery
+        .toLowerCase()
+        .split(RegExp(r'\W+'))
+        .where((w) => w.length > 2 && !_genericQueryWords.contains(w))
+        .toSet();
+
+    // No meaningful query words → no related posts (avoids showing cards for greetings)
+    if (queryTokens.isEmpty) return [];
+
+    // AI text tokens — secondary signal (long words only, no category words)
+    final aiTokens = aiText
+        .toLowerCase()
+        .split(RegExp(r'\W+'))
+        .where((w) => w.length > 4 && !_genericQueryWords.contains(w))
+        .toSet();
+
     final scored = <PostModel, int>{};
 
     for (final post in allPosts) {
       int score = 0;
+      final titleLower = post.title.toLowerCase();
+      final locationLower = post.location.toLowerCase();
+      final descLower = post.description.toLowerCase();
+      final catLower = post.category.toLowerCase();
 
-      // Category exact match — strongest signal
-      if (post.category.isNotEmpty &&
-          searchText.contains(post.category.toLowerCase())) {
-        score += 4;
+      // User query: title hit = strongest, then location, category, description
+      for (final token in queryTokens) {
+        if (titleLower.contains(token)) score += 8;
+        else if (locationLower.contains(token)) score += 4;
+        else if (catLower.contains(token)) score += 3;
+        else if (descLower.contains(token)) score += 1;
       }
 
-      // Title words
-      for (final word in post.title
-          .toLowerCase()
-          .split(RegExp(r'\W+'))
-          .where((w) => w.length > 3)) {
-        if (searchText.contains(word)) score += 2;
+      // AI text: only title/location name matches (no category — avoids
+      // "restaurant" in AI reply matching every restaurant in the list)
+      for (final token in aiTokens) {
+        if (titleLower.contains(token)) score += 5;
+        else if (locationLower.contains(token)) score += 2;
       }
 
-      // Location words
-      for (final word in post.location
-          .toLowerCase()
-          .split(RegExp(r'\W+'))
-          .where((w) => w.length > 3)) {
-        if (searchText.contains(word)) score++;
-      }
-
-      // Distance bonus — posts closer to user rank higher
+      // Distance bonus
       if (_position != null && (post.lat != 0 || post.lng != 0)) {
         final dist = Geolocator.distanceBetween(
           _position!.latitude, _position!.longitude,
@@ -255,14 +291,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
         else if (dist < 15000) score += 1;
       }
 
-      // Require category + at least one title word (score ≥ 6) to avoid
-      // showing posts that only match by category but are the wrong place.
-      if (score >= 6) scored[post] = score;
+      // Require a minimum content match — distance alone cannot qualify a post
+      if (score >= 10) scored[post] = score;
     }
 
     final sorted = scored.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return sorted.take(2).map((e) => e.key).toList();
+    return sorted.take(3).map((e) => e.key).toList();
   }
 
   @override
@@ -302,7 +337,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
         builder: (context, snap) {
           final messages = snap.data ?? [];
           final isSuperUser = auth.userModel?.isSuperUser ?? false;
-          final limitReached = _isAiChat && !isSuperUser && _limitReached;
+          final isPremium = auth.userModel?.isPremium ?? false;
+          final limitReached = _isAiChat && !isSuperUser && !isPremium && _limitReached;
           final todayAiMsgs = _todayAiCount;
 
           // Keep current messages available for AI sending (avoids redundant fetch)
@@ -383,12 +419,20 @@ class _ConversationScreenState extends State<ConversationScreen> {
             );
           }
 
-          return Column(
-            children: [
-              Expanded(child: listWidget),
-              if (_isAiChat && !limitReached) _buildSuggestionChips(),
-              _buildInputBar(limitReached, todayAiMsgs),
-            ],
+          final lastWasRecommendation = messages.isNotEmpty &&
+              messages.any((m) => m.senderId == 'ai') &&
+              messages.lastWhere((m) => m.senderId == 'ai').text.contains('**');
+
+          return ResponsiveBody(
+            maxWidth: AppBreakpoints.maxDetailWidth,
+            child: Column(
+              children: [
+                Expanded(child: listWidget),
+                if (_isAiChat && !limitReached && lastWasRecommendation)
+                  _buildSuggestionChips(),
+                _buildInputBar(limitReached, todayAiMsgs),
+              ],
+            ),
           );
         },
       ),
@@ -841,7 +885,7 @@ class _MessageBubble extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.72,
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.72,
                   ),
                   decoration: BoxDecoration(
                     color: isMe

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
@@ -12,9 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_utils.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../data/models/post_model.dart';
+import '../../data/repositories/posts_repo.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
+import '../../shared/widgets/paywall_sheet.dart';
 
 class MapScreen extends StatefulWidget {
   final String? focusPostId;
@@ -24,11 +26,16 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final MapController _mapController = MapController();
   bool _mapReady = false; // guard: don't call move() before first frame
   Position? _currentPosition;
   StreamSubscription<Position>? _locationSub;
+  Timer? _searchDebounce;
   bool _following = false;
   bool _startingLocation = false;
   String _selectedCategory = 'All';
@@ -39,6 +46,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _darkMap = false;
   bool _focusListenerAdded = false;
   bool _showSuggestions = false;
+  bool _postSheetExpanded = true;
 
   static const _cairoCenter = LatLng(30.0444, 31.2357);
   static const _defaultZoom = 15.0;
@@ -126,19 +134,24 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _focusOnPost(String postId) {
-    final posts = context.read<PostsProvider>();
-    final post = posts.getPostById(postId);
-    if (post != null && post.lat != 0) {
-      setState(() => _selectedPost = post);
+  Future<void> _focusOnPost(String postId) async {
+    // Try local cache first, then fall back to Firestore (handles paginated-out posts)
+    PostModel? post = context.read<PostsProvider>().getPostById(postId);
+    if (post == null) {
+      try {
+        post = await PostsRepo().getPost(postId);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (post != null && (post.lat != 0 || post.lng != 0)) {
+      setState(() {
+        _following = false;
+        _selectedPost = post;
+        _postSheetExpanded = false;
+      });
       if (_mapReady) _mapController.move(LatLng(post.lat, post.lng), 16.0);
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This post has no map location set.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      AppToast.info('This post has no map location set.');
     }
   }
 
@@ -159,6 +172,7 @@ class _MapScreenState extends State<MapScreen> {
       context.read<PostsProvider>().removeListener(_onPostsLoaded);
     }
     _locationSub?.cancel();
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -231,10 +245,7 @@ class _MapScreenState extends State<MapScreen> {
     }, onError: (_) {});
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
-  }
+  void _showSnack(String msg) => AppToast.info(msg);
 
   void _zoomIn() {
     if (!_mapReady) return;
@@ -528,6 +539,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin
     return Consumer<PostsProvider>(
       builder: (context, posts, _) {
         final filtered = _getFilteredPosts(posts.feedPosts);
@@ -542,7 +554,11 @@ class _MapScreenState extends State<MapScreen> {
             height: dist != null ? 56 : 36,
             alignment: Alignment.topCenter,
             child: GestureDetector(
-              onTap: () => setState(() => _selectedPost = post),
+              onTap: () => setState(() {
+                _following = false;
+                _selectedPost = post;
+                _postSheetExpanded = true;
+              }),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -613,7 +629,15 @@ class _MapScreenState extends State<MapScreen> {
               options: MapOptions(
                 initialCenter: _cairoCenter,
                 initialZoom: _defaultZoom,
-                onMapReady: () => setState(() => _mapReady = true),
+                onMapReady: () {
+                  setState(() => _mapReady = true);
+                  if (widget.focusPostId != null) {
+                    _focusOnPost(widget.focusPostId!);
+                  } else if (_selectedPost != null) {
+                    _mapController.move(
+                        LatLng(_selectedPost!.lat, _selectedPost!.lng), 16.0);
+                  }
+                },
                 onTap: (_, __) => setState(() {
                   _selectedPost = null;
                   _showSuggestions = false;
@@ -699,7 +723,12 @@ class _MapScreenState extends State<MapScreen> {
                                 ),
                                 child: TextField(
                                   controller: _searchCtrl,
-                                  onChanged: (_) => setState(() => _showSuggestions = _searchCtrl.text.isNotEmpty),
+                                  onChanged: (_) {
+                                    _searchDebounce?.cancel();
+                                    _searchDebounce = Timer(const Duration(milliseconds: 280), () {
+                                      if (mounted) setState(() => _showSuggestions = _searchCtrl.text.isNotEmpty);
+                                    });
+                                  },
                                   onTap: () => setState(() => _showSuggestions = _searchCtrl.text.isNotEmpty),
                                   decoration: InputDecoration(
                                     hintText: 'Search places...',
@@ -905,7 +934,9 @@ class _MapScreenState extends State<MapScreen> {
             // Zoom + distance filter buttons — right side
             Positioned(
               right: 12,
-              bottom: _selectedPost != null ? 230 : 100,
+              bottom: _selectedPost != null
+                  ? (_postSheetExpanded ? 230 : 108)
+                  : 100,
               child: Column(
                 children: [
                   _MapButton(
@@ -946,7 +977,9 @@ class _MapScreenState extends State<MapScreen> {
             // Legend — left side
             Positioned(
               left: 12,
-              bottom: _selectedPost != null ? 230 : 20,
+              bottom: _selectedPost != null
+                  ? (_postSheetExpanded ? 230 : 20)
+                  : 20,
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -983,6 +1016,9 @@ class _MapScreenState extends State<MapScreen> {
                 right: 0,
                 child: _PostBottomSheet(
                   post: _selectedPost!,
+                  expanded: _postSheetExpanded,
+                  onToggleExpanded: () =>
+                      setState(() => _postSheetExpanded = !_postSheetExpanded),
                   onClose: () => setState(() => _selectedPost = null),
                 ),
               ),
@@ -1102,12 +1138,97 @@ class _PulsingDotState extends State<_PulsingDot>
 
 class _PostBottomSheet extends StatelessWidget {
   final PostModel post;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
   final VoidCallback onClose;
 
-  const _PostBottomSheet({required this.post, required this.onClose});
+  const _PostBottomSheet({
+    required this.post,
+    required this.expanded,
+    required this.onToggleExpanded,
+    required this.onClose,
+  });
+
+  static const Map<String, String> _webFallbackImageByPostId = {
+    // Original source blocks/404s on web due CORS and invalid file.
+    'seed_cfc_mall':
+        'https://images.unsplash.com/photo-1519567770579-c2fc4f8e4b95?auto=format&fit=crop&w=1400&q=80',
+    // TMG source currently returns 404/CORS on web.
+    'seed_gateway_mall':
+        'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?auto=format&fit=crop&w=1400&q=80',
+  };
+
+  String _resolvedImageUrl(PostModel post) {
+    final fallback = _webFallbackImageByPostId[post.postId];
+    if (fallback != null && fallback.isNotEmpty) return fallback;
+    for (final url in post.allImageUrls) {
+      if (url.isEmpty) continue;
+      final isKnownBrokenCfc = post.postId == 'seed_cfc_mall' &&
+          url.contains('festivalcitymallcairo.com');
+      if (!isKnownBrokenCfc) return url;
+    }
+    return '';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final imageUrl = _resolvedImageUrl(post);
+    if (!expanded) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onToggleExpanded,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, -3)),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.drag_handle, color: kMutedFg, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        post.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        post.location,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: kMutedFg),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Expand',
+                  onPressed: onToggleExpanded,
+                  icon: const Icon(Icons.keyboard_arrow_up, color: kDark),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close, color: kMutedFg),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1120,15 +1241,27 @@ class _PostBottomSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          GestureDetector(
+            onTap: onToggleExpanded,
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: kMuted,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
           // Always render a fixed-height container so the close button
           // (Positioned) always has a sized parent to anchor to.
           Stack(
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: post.imageUrl.isNotEmpty
+                child: imageUrl.isNotEmpty
                     ? CachedNetworkImage(
-                        imageUrl: post.imageUrl,
+                        imageUrl: imageUrl,
                         width: double.infinity,
                         height: 150,
                         fit: BoxFit.cover,
@@ -1184,28 +1317,15 @@ class _PostBottomSheet extends StatelessWidget {
                   onPressed: () async {
                     final auth = context.read<AuthProvider>();
                     final posts = context.read<PostsProvider>();
-                    final isSuperUser = auth.userModel?.isSuperUser ?? false;
-                    if (!isSuperUser) {
-                      final saved = await posts.getSavedPosts(auth.uid);
-                      if (!context.mounted) return;
-                      if (saved.length >= 5) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Save limit reached (5/5). Earn 100 karma to unlock unlimited saves.'),
-                            duration: Duration(seconds: 3),
-                          ),
-                        );
-                        return;
-                      }
+                    final u = auth.userModel;
+                    final canSaveUnlimited =
+                        (u?.isSuperUser ?? false) || (u?.isPremium ?? false);
+                    if (!canSaveUnlimited && posts.savedPostCount >= 5) {
+                      await PaywallSheet.show(context, PaywallTrigger.pins);
+                      return;
                     }
                     await posts.savePost(auth.uid, post.postId);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Pinned!'),
-                            duration: Duration(seconds: 2)),
-                      );
-                    }
+                    AppToast.success('Pinned!');
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: kDark,

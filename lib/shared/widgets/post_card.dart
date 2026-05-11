@@ -6,10 +6,12 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import 'super_user_badge.dart';
+import 'paywall_sheet.dart';
 
 const _categoryColors = {
   'restaurant': kOrange,
@@ -38,6 +40,8 @@ class _PostCardState extends State<PostCard>
   bool _isSaved = false;
   int? _userVote; // 1 = up, -1 = down, null = none
   int _imageIndex = 0;
+  int _localUpvotes = 0;
+  int _localDownvotes = 0;
   late final PageController _pageCtrl;
 
   late final AnimationController _heartCtrl;
@@ -49,6 +53,9 @@ class _PostCardState extends State<PostCard>
   @override
   void initState() {
     super.initState();
+
+    _localUpvotes = widget.post.upvotes;
+    _localDownvotes = widget.post.downvotes;
 
     _pageCtrl = PageController();
     _heartCtrl = AnimationController(
@@ -97,7 +104,12 @@ class _PostCardState extends State<PostCard>
   @override
   void didUpdateWidget(PostCard old) {
     super.didUpdateWidget(old);
-    // Keep vote state in sync if the post data changes from provider
+    if (old.post.upvotes != widget.post.upvotes) {
+      setState(() => _localUpvotes = widget.post.upvotes);
+    }
+    if (old.post.downvotes != widget.post.downvotes) {
+      setState(() => _localDownvotes = widget.post.downvotes);
+    }
     if (old.post.upvotedBy != widget.post.upvotedBy) {
       final auth = context.read<AuthProvider>();
       final username = auth.userModel?.username ?? '';
@@ -115,8 +127,6 @@ class _PostCardState extends State<PostCard>
     _heartCtrl.dispose();
     super.dispose();
   }
-
-  int get _score => widget.post.upvotes - widget.post.downvotes;
 
   void _onDoubleTap() {
     HapticFeedback.mediumImpact();
@@ -187,14 +197,18 @@ class _PostCardState extends State<PostCard>
                           children: [
                             Row(
                               children: [
-                                Text(
-                                  post.username,
-                                  style: TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13),
+                                Flexible(
+                                  child: Text(
+                                    post.username,
+                                    style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
                                 ),
                                 if (post.isSuperUser) ...[
                                   const SizedBox(width: 6),
@@ -220,6 +234,23 @@ class _PostCardState extends State<PostCard>
                           ],
                         ),
                       ),
+                      if (post.isSponsoredContent)
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'Sponsored',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6366F1)),
+                          ),
+                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
@@ -275,8 +306,8 @@ class _PostCardState extends State<PostCard>
                   child: Row(
                     children: [
                       _VotePill(
-                        upvotes: widget.post.upvotes,
-                        downvotes: widget.post.downvotes,
+                        upvotes: _localUpvotes,
+                        downvotes: _localDownvotes,
                         userVote: _userVote,
                         onUpvote: () => _handleVote(1),
                         onDownvote: () => _handleVote(-1),
@@ -509,49 +540,60 @@ class _PostCardState extends State<PostCard>
     );
   }
 
-  bool _voting = false;
-
-  Future<void> _handleVote(int vote) async {
-    if (_voting) return;
+  void _handleVote(int vote) {
     final auth = context.read<AuthProvider>();
     final posts = context.read<PostsProvider>();
     if (auth.uid.isEmpty) return;
 
-    _voting = true;
     HapticFeedback.mediumImpact();
-    try {
-      final prevVote = _userVote;
-      final voterName = auth.userModel?.username ?? 'User';
 
-      if (prevVote == vote) {
-        // Un-vote
-        setState(() => _userVote = null);
+    final prevVote = _userVote;
+    final voterName = auth.userModel?.username ?? '';
+
+    if (prevVote == vote) {
+      // Un-vote: remove current vote
+      setState(() {
+        _userVote = null;
         if (vote == 1) {
-          await posts.removeUpvote(widget.post.postId, voterName);
+          _localUpvotes = (_localUpvotes - 1).clamp(0, 999999);
         } else {
-          await posts.removeDownvote(widget.post.postId);
+          _localDownvotes = (_localDownvotes - 1).clamp(0, 999999);
         }
-        return;
-      }
-
-      // Remove previous vote before applying new one
-      if (prevVote == 1) {
-        await posts.removeUpvote(widget.post.postId, voterName);
-      } else if (prevVote == -1) {
-        await posts.removeDownvote(widget.post.postId);
-      }
-
-      setState(() => _userVote = vote);
-      final bool ok;
+      });
       if (vote == 1) {
-        ok = await posts.upvotePost(
-            widget.post.postId, auth.uid, widget.post.userId, voterName);
+        posts.removeUpvote(widget.post.postId, voterName);
+        AppToast.info('Upvote removed.');
       } else {
-        ok = await posts.downvotePost(widget.post.postId);
+        posts.removeDownvote(widget.post.postId);
+        AppToast.info('Downvote removed.');
       }
-      if (!ok && mounted) setState(() => _userVote = prevVote);
-    } finally {
-      _voting = false;
+      return;
+    }
+
+    // Switch vote: undo previous, apply new
+    if (prevVote == 1) {
+      setState(() => _localUpvotes = (_localUpvotes - 1).clamp(0, 999999));
+      posts.removeUpvote(widget.post.postId, voterName);
+    } else if (prevVote == -1) {
+      setState(() => _localDownvotes = (_localDownvotes - 1).clamp(0, 999999));
+      posts.removeDownvote(widget.post.postId);
+    }
+
+    setState(() {
+      _userVote = vote;
+      if (vote == 1) {
+        _localUpvotes++;
+      } else {
+        _localDownvotes++;
+      }
+    });
+
+    if (vote == 1) {
+      posts.upvotePost(widget.post.postId, auth.uid, widget.post.userId, voterName);
+      AppToast.success('Upvoted!');
+    } else {
+      posts.downvotePost(widget.post.postId);
+      AppToast.info('Downvoted.');
     }
   }
 
@@ -565,31 +607,21 @@ class _PostCardState extends State<PostCard>
     if (_isSaved) {
       setState(() => _isSaved = false);
       await posts.unsavePost(auth.uid, widget.post.postId);
+      AppToast.info('Unpinned.');
       return;
     }
 
-    final isSuperUser = auth.userModel?.isSuperUser ?? false;
-    if (!isSuperUser && posts.savedPostCount >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Save limit reached (5/5). Unsave a post or earn 100 karma to unlock unlimited saves.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
+    final user = auth.userModel;
+    final canSaveUnlimited =
+        (user?.isSuperUser ?? false) || (user?.isPremium ?? false);
+    if (!canSaveUnlimited && posts.savedPostCount >= 5) {
+      await PaywallSheet.show(context, PaywallTrigger.pins);
       return;
     }
 
     setState(() => _isSaved = true);
     await posts.savePost(auth.uid, widget.post.postId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pinned!'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    AppToast.success('Pinned!');
   }
 
 }

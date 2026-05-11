@@ -10,8 +10,12 @@ class PostModel {
   final String description;
   final String localTips;
   final List<String> recommendedDishes;
+  // Multi-image support. imageUrls is the canonical list.
+  // imageUrl/imagePublicId kept for backward compatibility with existing Firestore docs.
   final String imageUrl;
   final String imagePublicId;
+  final List<String> imageUrls;
+  final List<String> imagePublicIds;
   final String location;
   final double lat;
   final double lng;
@@ -21,6 +25,8 @@ class PostModel {
   final List<String> upvotedBy;
   final int commentCount;
   final Timestamp createdAt;
+  final bool isSponsoredContent;
+  final String aiSummary;
 
   PostModel({
     required this.postId,
@@ -34,6 +40,8 @@ class PostModel {
     this.recommendedDishes = const [],
     this.imageUrl = '',
     this.imagePublicId = '',
+    this.imageUrls = const [],
+    this.imagePublicIds = const [],
     this.location = '',
     this.lat = 0.0,
     this.lng = 0.0,
@@ -43,9 +51,29 @@ class PostModel {
     this.upvotedBy = const [],
     this.commentCount = 0,
     Timestamp? createdAt,
+    this.isSponsoredContent = false,
+    this.aiSummary = '',
   }) : createdAt = createdAt ?? Timestamp.now();
 
+  /// All image URLs for this post. Falls back to legacy single imageUrl field.
+  List<String> get allImageUrls {
+    if (imageUrls.isNotEmpty) return imageUrls;
+    if (imageUrl.isNotEmpty) return [imageUrl];
+    return [];
+  }
+
   factory PostModel.fromMap(Map<String, dynamic> map, String id) {
+    final legacyUrl = (map['imageUrl'] as String?) ?? '';
+    final legacyPublicId = (map['imagePublicId'] as String?) ?? '';
+    final urls = List<String>.from(map['imageUrls'] ?? []);
+    final publicIds = List<String>.from(map['imagePublicIds'] ?? []);
+
+    // Migrate legacy single-image doc into the list fields
+    if (urls.isEmpty && legacyUrl.isNotEmpty) {
+      urls.add(legacyUrl);
+      if (legacyPublicId.isNotEmpty) publicIds.add(legacyPublicId);
+    }
+
     return PostModel(
       postId: id,
       userId: map['userId'] ?? '',
@@ -55,10 +83,11 @@ class PostModel {
       title: map['title'] ?? '',
       description: map['description'] ?? '',
       localTips: map['localTips'] ?? '',
-      recommendedDishes:
-          List<String>.from(map['recommendedDishes'] ?? []),
-      imageUrl: map['imageUrl'] ?? '',
-      imagePublicId: map['imagePublicId'] ?? '',
+      recommendedDishes: List<String>.from(map['recommendedDishes'] ?? []),
+      imageUrl: urls.isNotEmpty ? urls.first : legacyUrl,
+      imagePublicId: publicIds.isNotEmpty ? publicIds.first : legacyPublicId,
+      imageUrls: urls,
+      imagePublicIds: publicIds,
       location: map['location'] ?? '',
       lat: (map['lat'] ?? 0.0).toDouble(),
       lng: (map['lng'] ?? 0.0).toDouble(),
@@ -68,6 +97,8 @@ class PostModel {
       upvotedBy: List<String>.from(map['upvotedBy'] ?? []),
       commentCount: map['commentCount'] ?? 0,
       createdAt: map['createdAt'] ?? Timestamp.now(),
+      isSponsoredContent: map['isSponsoredContent'] ?? false,
+      aiSummary: map['aiSummary'] ?? '',
     );
   }
 
@@ -82,8 +113,11 @@ class PostModel {
       'description': description,
       'localTips': localTips,
       'recommendedDishes': recommendedDishes,
-      'imageUrl': imageUrl,
-      'imagePublicId': imagePublicId,
+      // Write both formats for backward compat
+      'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : imageUrl,
+      'imagePublicId': imagePublicIds.isNotEmpty ? imagePublicIds.first : imagePublicId,
+      'imageUrls': imageUrls.isNotEmpty ? imageUrls : (imageUrl.isNotEmpty ? [imageUrl] : []),
+      'imagePublicIds': imagePublicIds.isNotEmpty ? imagePublicIds : (imagePublicId.isNotEmpty ? [imagePublicId] : []),
       'location': location,
       'lat': lat,
       'lng': lng,
@@ -93,6 +127,8 @@ class PostModel {
       'upvotedBy': upvotedBy,
       'commentCount': commentCount,
       'createdAt': createdAt,
+      'isSponsoredContent': isSponsoredContent,
+      'aiSummary': aiSummary,
     };
   }
 
@@ -108,6 +144,8 @@ class PostModel {
     List<String>? recommendedDishes,
     String? imageUrl,
     String? imagePublicId,
+    List<String>? imageUrls,
+    List<String>? imagePublicIds,
     String? location,
     double? lat,
     double? lng,
@@ -116,6 +154,8 @@ class PostModel {
     int? downvotes,
     List<String>? upvotedBy,
     int? commentCount,
+    bool? isSponsoredContent,
+    String? aiSummary,
   }) {
     return PostModel(
       postId: postId ?? this.postId,
@@ -129,6 +169,8 @@ class PostModel {
       recommendedDishes: recommendedDishes ?? this.recommendedDishes,
       imageUrl: imageUrl ?? this.imageUrl,
       imagePublicId: imagePublicId ?? this.imagePublicId,
+      imageUrls: imageUrls ?? this.imageUrls,
+      imagePublicIds: imagePublicIds ?? this.imagePublicIds,
       location: location ?? this.location,
       lat: lat ?? this.lat,
       lng: lng ?? this.lng,
@@ -138,6 +180,8 @@ class PostModel {
       upvotedBy: upvotedBy ?? this.upvotedBy,
       commentCount: commentCount ?? this.commentCount,
       createdAt: createdAt,
+      isSponsoredContent: isSponsoredContent ?? this.isSponsoredContent,
+      aiSummary: aiSummary ?? this.aiSummary,
     );
   }
 }

@@ -9,11 +9,15 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../core/utils/validators.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../data/models/post_model.dart';
+import '../../data/services/ai_service.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
+import '../../shared/widgets/paywall_sheet.dart';
 
 // Freemium limits
 const int _kFreePostsPerDay = 3;
@@ -38,6 +42,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   String _selectedCategory = 'Restaurant';
   bool _posting = false;
   bool _checkingLimit = true;
+  bool _generatingCaption = false;
   int _todayPostCount = 0;
   double? _pickedLat;
   double? _pickedLng;
@@ -80,6 +85,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
+  Future<void> _generateCaption() async {
+    final category = _selectedCategory;
+    final location = _locationCtrl.text.trim();
+    final desc = _descCtrl.text.trim();
+    setState(() => _generatingCaption = true);
+    try {
+      final result = await AIService().generatePostSummary(
+        title: location.isNotEmpty ? location : category,
+        category: category,
+        description: desc.isNotEmpty ? desc : 'A hidden gem worth visiting.',
+        localTips: _tipsCtrl.text.trim(),
+      );
+      if (result.isNotEmpty && mounted) {
+        _titleCtrl.text = result.length > 500 ? result.substring(0, 497) + '...' : result;
+        AppToast.success('Caption generated!');
+      } else if (mounted) {
+        AppToast.error('Could not generate caption. Try again.');
+      }
+    } catch (_) {
+      if (mounted) AppToast.error('Generation failed. Check your connection.');
+    } finally {
+      if (mounted) setState(() => _generatingCaption = false);
+    }
+  }
+
   @override
   void dispose() {
     _titleCtrl.dispose();
@@ -93,9 +123,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final isSuperUser = auth.userModel?.isSuperUser ?? false;
+    final user = auth.userModel;
+    final canPostUnlimited =
+        (user?.isSuperUser ?? false) || (user?.isPremium ?? false);
     final limitReached =
-        !isSuperUser && _todayPostCount >= _kFreePostsPerDay;
+        !canPostUnlimited && _todayPostCount >= _kFreePostsPerDay;
     final canPost = !_posting && !_checkingLimit && !limitReached;
 
     return Scaffold(
@@ -142,7 +174,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxFormWidth,
+        child: SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -151,7 +185,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Freemium limit banner
-              if (!isSuperUser) _buildFreemiumBanner(limitReached),
+              if (!canPostUnlimited) _buildFreemiumBanner(limitReached),
               _buildImagePicker(),
               const SizedBox(height: 20),
 
@@ -177,6 +211,25 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     ),
                   );
                 },
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _generatingCaption ? null : _generateCaption,
+                  icon: _generatingCaption
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Color(0xFF8B5CF6)))
+                      : const Icon(Icons.auto_awesome,
+                          size: 14, color: Color(0xFF8B5CF6)),
+                  label: Text(
+                    _generatingCaption ? 'Generating...' : 'AI Generate Caption',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF8B5CF6)),
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
 
@@ -376,6 +429,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -432,16 +486,24 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: limitReached
-                ? const Column(
+                ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Daily post limit reached (3/3)',
+                      const Text('Daily post limit reached (3/3)',
                           style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                               color: kDestructive)),
-                      Text('Earn 100 karma to unlock unlimited posting',
-                          style: TextStyle(color: kMutedFg, fontSize: 12)),
+                      GestureDetector(
+                        onTap: () => PaywallSheet.show(
+                            context, PaywallTrigger.posts),
+                        child: const Text(
+                            'Upgrade to Premium for unlimited posting →',
+                            style: TextStyle(
+                                color: kOrange,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
+                      ),
                     ],
                   )
                 : Text(
@@ -597,26 +659,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final file = File(x.path);
         final bytes = await file.length();
         if (bytes > 4 * 1024 * 1024) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('One image was too large and was skipped.'),
-                backgroundColor: kDestructive,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
+          AppToast.warning('One image was too large and was skipped.');
           continue;
         }
         files.add(file);
       }
       if (files.isNotEmpty) setState(() => _selectedImages.addAll(files));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking images: $e'), backgroundColor: kDestructive),
-        );
-      }
+      AppToast.error('Error picking images: $e');
     }
   }
 
@@ -675,21 +725,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         );
         context.go('/feed');
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Failed to post. Please try again.'),
-              backgroundColor: kDestructive),
-        );
+        AppToast.error('Failed to post. Please try again.');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: ${e.toString().replaceFirst("Exception: ", "")}'),
-              backgroundColor: kDestructive,
-              duration: const Duration(seconds: 5)),
-        );
-      }
+      AppToast.error(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _posting = false);
     }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
@@ -53,7 +54,9 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
               color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
-      body: _loading
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxFeedWidth,
+        child: _loading
           ? const Center(child: CircularProgressIndicator(color: kOrange))
           : CustomScrollView(
               slivers: [
@@ -121,6 +124,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                   ),
               ],
             ),
+        ),
     );
   }
 }

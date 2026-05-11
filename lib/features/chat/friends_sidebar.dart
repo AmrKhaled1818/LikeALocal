@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/user_repo.dart';
 import '../../shared/providers/auth_provider.dart';
@@ -158,16 +159,12 @@ class _FriendsSidebarState extends State<FriendsSidebar> {
     if (!mounted) return;
 
     if (match.uid.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User "$username" not found')),
-      );
+      AppToast.error('User "$username" not found');
       return;
     }
 
     if (match.uid == auth.uid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You can't chat with yourself!")),
-      );
+      AppToast.warning("You can't chat with yourself!");
       return;
     }
 
@@ -257,10 +254,7 @@ class _UserSearchResultsState extends State<_UserSearchResults> {
               final auth = context.read<AuthProvider>();
               final chatProvider = context.read<ChatProvider>();
               if (u.uid == auth.uid) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text("You can't chat with yourself!")),
-                );
+                AppToast.warning("You can't chat with yourself!");
                 return;
               }
               final chatId =

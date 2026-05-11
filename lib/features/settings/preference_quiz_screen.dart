@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/user_provider.dart';
 
@@ -56,18 +57,13 @@ class _PreferenceQuizScreenState extends State<PreferenceQuizScreen> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    final auth = context.read<AuthProvider>();
     await context.read<UserProvider>().updatePreferences({
       'budget': _budget,
       'atmosphere': _atmosphere,
       'favCategories': _categories.toList(),
     });
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Preferences saved! The AI now knows your style.'),
-            backgroundColor: Colors.green),
-      );
+      AppToast.success('Preferences saved! The AI now knows your style.');
       context.pop();
     }
   }

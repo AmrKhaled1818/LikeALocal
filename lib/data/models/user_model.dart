@@ -14,6 +14,9 @@ class UserModel {
   final Map<String, dynamic> preferences;
   final Timestamp joinedAt;
   final String fcmToken;
+  final bool isPremium;
+  final int pinsUsed;
+  final int postsCreated;
 
   UserModel({
     required this.uid,
@@ -29,6 +32,9 @@ class UserModel {
     Map<String, dynamic>? preferences,
     Timestamp? joinedAt,
     this.fcmToken = '',
+    this.isPremium = false,
+    this.pinsUsed = 0,
+    this.postsCreated = 0,
   })  : preferences = preferences ??
             {'budget': '', 'atmosphere': '', 'favCategories': []},
         joinedAt = joinedAt ?? Timestamp.now();
@@ -49,6 +55,9 @@ class UserModel {
           {'budget': '', 'atmosphere': '', 'favCategories': []},
       joinedAt: map['joinedAt'] ?? Timestamp.now(),
       fcmToken: map['fcmToken'] ?? '',
+      isPremium: map['isPremium'] ?? false,
+      pinsUsed: map['pinsUsed'] ?? 0,
+      postsCreated: map['postsCreated'] ?? 0,
     );
   }
 
@@ -67,6 +76,9 @@ class UserModel {
       'preferences': preferences,
       'joinedAt': joinedAt,
       'fcmToken': fcmToken,
+      'isPremium': isPremium,
+      'pinsUsed': pinsUsed,
+      'postsCreated': postsCreated,
     };
   }
 
@@ -84,6 +96,9 @@ class UserModel {
     Map<String, dynamic>? preferences,
     Timestamp? joinedAt,
     String? fcmToken,
+    bool? isPremium,
+    int? pinsUsed,
+    int? postsCreated,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -99,6 +114,9 @@ class UserModel {
       preferences: preferences ?? this.preferences,
       joinedAt: joinedAt ?? this.joinedAt,
       fcmToken: fcmToken ?? this.fcmToken,
+      isPremium: isPremium ?? this.isPremium,
+      pinsUsed: pinsUsed ?? this.pinsUsed,
+      postsCreated: postsCreated ?? this.postsCreated,
     );
   }
 }

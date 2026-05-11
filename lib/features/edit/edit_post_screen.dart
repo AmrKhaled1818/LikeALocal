@@ -8,6 +8,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../data/models/post_model.dart';
 import '../../features/create/create_post_screen.dart';
@@ -29,7 +31,13 @@ class _EditPostScreenState extends State<EditPostScreen> {
   late final TextEditingController _tipsCtrl;
   late final TextEditingController _dishesCtrl;
 
-  File? _newImage;
+  // existing images from post (user may remove some)
+  late List<String> _keptImageUrls;
+  late List<String> _keptImagePublicIds;
+  // new local files to upload on save
+  final List<File> _newImages = [];
+  static const int _maxImages = 5;
+
   late String _selectedCategory;
   late double? _pickedLat;
   late double? _pickedLng;
@@ -51,6 +59,8 @@ class _EditPostScreenState extends State<EditPostScreen> {
     _selectedCategory = p.category;
     _pickedLat = p.lat != 0 ? p.lat : null;
     _pickedLng = p.lng != 0 ? p.lng : null;
+    _keptImageUrls = List<String>.from(p.allImageUrls);
+    _keptImagePublicIds = List<String>.from(p.imagePublicIds);
   }
 
   @override
@@ -101,7 +111,9 @@ class _EditPostScreenState extends State<EditPostScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxFormWidth,
+        child: SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -109,67 +121,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image picker
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: kMuted,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: kMutedFg.withOpacity(0.3), width: 1.5),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _newImage != null
-                      ? Image.file(_newImage!, fit: BoxFit.cover)
-                      : widget.post.imageUrl.isNotEmpty
-                          ? Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                CachedNetworkImage(
-                                  imageUrl: widget.post.imageUrl,
-                                  fit: BoxFit.cover,
-                                ),
-                                Positioned(
-                                  bottom: 8,
-                                  right: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.edit, color: Colors.white, size: 12),
-                                        SizedBox(width: 4),
-                                        Text('Change photo',
-                                            style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_photo_alternate_outlined,
-                                    size: 48, color: kMutedFg),
-                                SizedBox(height: 8),
-                                Text('Add a photo (optional)',
-                                    style: TextStyle(
-                                        color: kMutedFg, fontSize: 14)),
-                              ],
-                            ),
-                ),
-              ),
+              _buildImageSection(),
               const SizedBox(height: 20),
 
               _label('Caption'),
@@ -260,7 +212,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
                                     'api_key': AppConfig.stadiaApiKey
                                   },
                                   userAgentPackageName:
-                                      'com.example.like_a_local',
+                                      'com.likealocal.app',
                                 ),
                                 MarkerLayer(markers: [
                                   Marker(
@@ -374,6 +326,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -384,44 +337,170 @@ class _EditPostScreenState extends State<EditPostScreen> {
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
       );
 
-  Future<void> _pickImage() async {
-    try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1080,
-        maxHeight: 1080,
-        imageQuality: 72,
-      );
-      if (picked == null) return;
-      final file = File(picked.path);
-      final bytes = await file.length();
-      if (bytes > 4 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image too large. Choose a smaller photo.'),
-              backgroundColor: kDestructive,
+  int get _totalImages => _keptImageUrls.length + _newImages.length;
+
+  Widget _buildImageSection() {
+    final canAdd = _totalImages < _maxImages;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_totalImages > 0) ...[
+          SizedBox(
+            height: 110,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                // existing network images
+                for (int i = 0; i < _keptImageUrls.length; i++)
+                  _existingThumbnail(i),
+                // new local files
+                for (int i = 0; i < _newImages.length; i++)
+                  _newThumbnail(i),
+                // add more button
+                if (canAdd) _addMoreButton(),
+              ],
             ),
-          );
-        }
-        return;
-      }
-      setState(() => _newImage = file);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo selected (${(bytes / 1024).round()}KB) — tap Save to upload.'),
-            duration: const Duration(seconds: 2),
           ),
-        );
+          const SizedBox(height: 6),
+          Text('${_totalImages}/$_maxImages photos',
+              style: const TextStyle(color: kMutedFg, fontSize: 12)),
+        ] else
+          GestureDetector(
+            onTap: _addImages,
+            child: Container(
+              height: 160,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: kMuted,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_photo_alternate_outlined, size: 48, color: kMutedFg),
+                  SizedBox(height: 8),
+                  Text('Add photos (optional, up to 5)',
+                      style: TextStyle(color: kMutedFg, fontSize: 14)),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _existingThumbnail(int index) {
+    return Stack(
+      children: [
+        Container(
+          width: 100,
+          height: 100,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: index == 0 ? Border.all(color: kOrange, width: 2) : null,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: CachedNetworkImage(imageUrl: _keptImageUrls[index], fit: BoxFit.cover),
+          ),
+        ),
+        if (index == 0)
+          Positioned(
+            bottom: 4, left: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(color: kOrange, borderRadius: BorderRadius.circular(4)),
+              child: const Text('Cover', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        Positioned(
+          top: 2, right: 10,
+          child: GestureDetector(
+            onTap: () => setState(() {
+              if (index < _keptImagePublicIds.length) _keptImagePublicIds.removeAt(index);
+              _keptImageUrls.removeAt(index);
+            }),
+            child: Container(
+              width: 20, height: 20,
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: const Icon(Icons.close, color: Colors.white, size: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _newThumbnail(int index) {
+    return Stack(
+      children: [
+        Container(
+          width: 100,
+          height: 100,
+          margin: const EdgeInsets.only(right: 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.file(_newImages[index], fit: BoxFit.cover),
+          ),
+        ),
+        Positioned(
+          top: 2, right: 10,
+          child: GestureDetector(
+            onTap: () => setState(() => _newImages.removeAt(index)),
+            child: Container(
+              width: 20, height: 20,
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: const Icon(Icons.close, color: Colors.white, size: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _addMoreButton() {
+    return GestureDetector(
+      onTap: _addImages,
+      child: Container(
+        width: 100, height: 100,
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: kMuted,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_a_photo_outlined, color: kMutedFg, size: 24),
+            SizedBox(height: 4),
+            Text('Add more', style: TextStyle(color: kMutedFg, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addImages() async {
+    final remaining = _maxImages - _totalImages;
+    if (remaining <= 0) return;
+    try {
+      final picked = await ImagePicker().pickMultiImage(
+        maxWidth: 1080, maxHeight: 1080, imageQuality: 72,
+      );
+      if (picked.isEmpty) return;
+      final toAdd = picked.take(remaining).toList();
+      final files = <File>[];
+      for (final x in toAdd) {
+        final file = File(x.path);
+        if (await file.length() > 4 * 1024 * 1024) continue;
+        files.add(file);
       }
+      if (files.isNotEmpty) setState(() => _newImages.addAll(files));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e'),
-              backgroundColor: kDestructive),
-        );
-      }
+      AppToast.error('Error picking images: $e');
     }
   }
 
@@ -436,12 +515,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
           .where((d) => d.isNotEmpty)
           .toList();
 
-      final updated = PostModel(
-        postId: widget.post.postId,
-        userId: widget.post.userId,
-        username: widget.post.username,
-        userAvatarUrl: widget.post.userAvatarUrl,
-        isSuperUser: widget.post.isSuperUser,
+      final updated = widget.post.copyWith(
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         location: _locationCtrl.text.trim(),
@@ -450,43 +524,26 @@ class _EditPostScreenState extends State<EditPostScreen> {
         category: _selectedCategory,
         localTips: _tipsCtrl.text.trim(),
         recommendedDishes: dishes,
-        imageUrl: widget.post.imageUrl,
-        imagePublicId: widget.post.imagePublicId,
-        upvotes: widget.post.upvotes,
-        downvotes: widget.post.downvotes,
-        upvotedBy: widget.post.upvotedBy,
-        commentCount: widget.post.commentCount,
-        createdAt: widget.post.createdAt,
+        imageUrl: _keptImageUrls.isNotEmpty ? _keptImageUrls.first : '',
+        imagePublicId: _keptImagePublicIds.isNotEmpty ? _keptImagePublicIds.first : '',
+        imageUrls: _keptImageUrls,
+        imagePublicIds: _keptImagePublicIds,
       );
 
       final ok = await context
           .read<PostsProvider>()
-          .updatePost(updated, _newImage);
+          .updatePost(updated, _newImages);
 
       if (mounted) {
         if (ok) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Post updated!'),
-                backgroundColor: Colors.green),
-          );
+          AppToast.success('Post updated!');
           context.pop();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Failed to update. Please try again.'),
-                backgroundColor: kDestructive),
-          );
+          AppToast.error('Failed to update. Please try again.');
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: kDestructive),
-        );
-      }
+      AppToast.error('Error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

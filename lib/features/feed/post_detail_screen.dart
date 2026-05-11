@@ -1,10 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/map_utils.dart';
+import '../../core/utils/toast_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
@@ -19,6 +19,9 @@ import '../../shared/providers/posts_provider.dart';
 import '../../shared/widgets/error_retry.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/super_user_badge.dart';
+import '../../shared/widgets/paywall_sheet.dart';
+import '../../core/utils/responsive.dart';
+import '../../data/services/ai_service.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final String postId;
@@ -143,9 +146,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       }
       if (!ok && mounted) {
         setState(() => _userVote = prevVote);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not register vote. Try again.')),
-        );
+        AppToast.error('Could not register vote. Try again.');
       }
     } finally {
       _voting = false;
@@ -159,22 +160,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (_isSaved) {
       setState(() => _isSaved = false);
       await pp.unsavePost(auth.uid, post.postId);
+      AppToast.info('Unpinned.');
       return;
     }
-    if (!(auth.userModel?.isSuperUser ?? false) && pp.savedPostCount >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Save limit reached (5/5). Earn 100 karma to unlock unlimited saves.'),
-        duration: Duration(seconds: 3),
-      ));
+    final u = auth.userModel;
+    final canSaveUnlimited =
+        (u?.isSuperUser ?? false) || (u?.isPremium ?? false);
+    if (!canSaveUnlimited && pp.savedPostCount >= 5) {
+      await PaywallSheet.show(context, PaywallTrigger.pins);
       return;
     }
     setState(() => _isSaved = true);
     await pp.savePost(auth.uid, post.postId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pinned!'), duration: Duration(seconds: 2)),
-      );
-    }
+    AppToast.success('Pinned!');
   }
 
   Widget _buildDetailImageSection(BuildContext context, PostModel post) {
@@ -249,7 +247,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner, AuthProvider auth) {
     _lazyInit(post, auth);
     return Scaffold(
-      body: Column(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxDetailWidth,
+        child: Column(
         children: [
           Expanded(
             child: CustomScrollView(
@@ -523,7 +523,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                       const SizedBox(height: 4),
                                       Text(post.localTips,
                                           style: const TextStyle(
-                                              fontSize: 13, color: null)),
+                                              fontSize: 14,
+                                              height: 1.5,
+                                              fontWeight: FontWeight.w500,
+                                              color: Color(0xFF3D2B00))),
                                     ],
                                   ),
                                 ),
@@ -552,6 +555,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 .toList(),
                           ),
                         ],
+
+                        // AI Local Insight
+                        const SizedBox(height: 16),
+                        _LocalInsightCard(post: post),
 
                         // Show on Map button
                         if (post.lat != 0 && post.lng != 0) ...[
@@ -702,9 +709,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               bottom: MediaQuery.of(context).viewInsets.bottom + 12,
               top: 8,
             ),
-            decoration: const BoxDecoration(
-              color: kBackground,
-              border: Border(top: BorderSide(color: kMuted)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
             ),
             child: Row(
               children: [
@@ -734,6 +741,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -760,11 +768,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       final ok = await context.read<PostsProvider>().deletePost(widget.postId);
       if (mounted) {
         if (ok) {
+          AppToast.success('Post deleted.');
           context.go('/feed');
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to delete post. Try again.'), backgroundColor: kDestructive),
-          );
+          AppToast.error('Failed to delete post. Try again.');
         }
       }
     }
@@ -790,21 +797,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       );
       await context.read<PostsProvider>().addComment(comment);
       _commentCtrl.clear();
-      Fluttertoast.showToast(
-        msg: 'Comment posted! Karma +1',
-        toastLength: Toast.LENGTH_SHORT,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-      );
+      AppToast.success('Comment posted! Karma +1');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error posting comment: $e'),
-            backgroundColor: kDestructive,
-          ),
-        );
-      }
+      AppToast.error('Error posting comment: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -1049,14 +1044,9 @@ class _CommentItemState extends State<_CommentItem> {
       await _repo.editComment(
           widget.postId, widget.comment.commentId, text);
       if (mounted) setState(() => _editing = false);
+      AppToast.success('Comment updated.');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: kDestructive),
-        );
-      }
+      AppToast.error('Error updating comment: $e');
     }
   }
 
@@ -1082,16 +1072,139 @@ class _CommentItemState extends State<_CommentItem> {
     if (confirm == true && mounted) {
       try {
         await _repo.deleteComment(widget.postId, widget.comment.commentId);
+        AppToast.success('Comment deleted.');
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Error: $e'),
-                backgroundColor: kDestructive),
-          );
-        }
+        AppToast.error('Error deleting comment: $e');
       }
     }
+  }
+}
+
+class _LocalInsightCard extends StatefulWidget {
+  final PostModel post;
+  const _LocalInsightCard({required this.post});
+
+  @override
+  State<_LocalInsightCard> createState() => _LocalInsightCardState();
+}
+
+class _LocalInsightCardState extends State<_LocalInsightCard> {
+  String? _summary;
+  bool _loading = false;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.post.aiSummary.isNotEmpty) {
+      _summary = widget.post.aiSummary;
+    } else {
+      _generate();
+    }
+  }
+
+  Future<void> _generate() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
+    try {
+      final result = await AIService().generatePostSummary(
+        title: widget.post.title,
+        category: widget.post.category,
+        description: widget.post.description,
+        localTips: widget.post.localTips,
+      );
+      if (result.isNotEmpty) {
+        // Cache to Firestore so we only generate once
+        await PostsRepo().updateAiSummary(widget.post.postId, result);
+        if (mounted) setState(() => _summary = result);
+      } else {
+        if (mounted) setState(() => _error = true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF8B5CF6).withOpacity(0.08),
+            const Color(0xFFEC4899).withOpacity(0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.auto_awesome,
+                    color: Colors.white, size: 14),
+              ),
+              const SizedBox(width: 8),
+              const Text('Local Insight',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Color(0xFF8B5CF6))),
+              const Spacer(),
+              if (_loading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF8B5CF6),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_summary != null)
+            Text(_summary!,
+                style: const TextStyle(fontSize: 13, height: 1.5))
+          else if (_error)
+            GestureDetector(
+              onTap: _generate,
+              child: const Row(
+                children: [
+                  Icon(Icons.refresh, size: 14, color: kMutedFg),
+                  SizedBox(width: 6),
+                  Text(
+                    'Could not load AI response. Tap to retry.',
+                    style: TextStyle(color: kMutedFg, fontSize: 13),
+                  ),
+                ],
+              ),
+            )
+          else if (!_loading)
+            const Text('Generating insight...',
+                style: TextStyle(color: kMutedFg, fontSize: 13)),
+        ],
+      ),
+    );
   }
 }
 

@@ -55,18 +55,20 @@ class AuthProvider extends ChangeNotifier {
       _notifSub = FirebaseFirestore.instance
           .collection('notifications')
           .where('userId', isEqualTo: user.uid)
-          .where('type', isEqualTo: 'upvote')
-          .orderBy('createdAt', descending: true)
-          .limit(1)
+          .limit(10)
           .snapshots()
           .listen((snap) {
         if (!_notifInitialized) {
           _notifInitialized = true;
-          return; // skip existing notifications on login
+          return; // skip pre-existing notifications on login
         }
-        for (final doc in snap.docs) {
-          final title = (doc.data()['title'] as String?) ?? 'New upvote';
-          final body = (doc.data()['body'] as String?) ?? '';
+        // Only react to newly added docs; filter type client-side (avoids composite index)
+        for (final change in snap.docChanges) {
+          if (change.type != DocumentChangeType.added) continue;
+          final data = change.doc.data();
+          if (data == null || (data['type'] as String?) != 'upvote') continue;
+          final title = (data['title'] as String?) ?? 'New upvote';
+          final body = (data['body'] as String?) ?? '';
           NotificationService.showLocalNotification(title, body);
         }
       }, onError: (_) {});

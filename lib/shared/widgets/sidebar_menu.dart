@@ -136,6 +136,12 @@ class SidebarMenu extends StatelessWidget {
                 ),
                 _menuItem(
                   context,
+                  icon: Icons.leaderboard_outlined,
+                  label: 'Karma Leaderboard',
+                  route: '/leaderboard',
+                ),
+                _menuItem(
+                  context,
                   icon: Icons.help_outline,
                   label: 'Help & FAQ',
                   route: '/faq',

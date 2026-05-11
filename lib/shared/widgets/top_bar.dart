@@ -25,11 +25,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SvgPicture.asset(
-            'assets/icons/icon.svg',
-            width: 24,
-            height: 24,
-          ),
+          SvgPicture.asset('assets/icons/icon.svg', width: 24, height: 24),
           const SizedBox(width: 8),
           const Text(
             'LikeALocal',
@@ -42,62 +38,21 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        // F53 — Unread notification badge
-        Consumer<AuthProvider>(
-          builder: (context, auth, _) {
-            if (auth.uid.isEmpty) {
-              return IconButton(
-                icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                onPressed: () => context.push('/notifications'),
-              );
-            }
-            return StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('notifications')
-                  .where('userId', isEqualTo: auth.uid)
-                  .snapshots(),
-              builder: (context, snap) {
-                // Filter unread client-side to avoid composite index
-                final unread = snap.data?.docs
-                        .where((d) => (d.data() as Map)['read'] == false)
-                        .length ??
-                    0;
-                return Stack(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined,
-                          color: Colors.white),
-                      onPressed: () => context.push('/notifications'),
-                    ),
-                    if (unread > 0)
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(
-                            color: kDestructive,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            unread > 9 ? '9+' : '$unread',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            );
-          },
+        // Notification badge — stream created once per auth session
+        Selector<AuthProvider, String>(
+          selector: (_, a) => a.uid,
+          builder: (context, uid, _) => uid.isEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                  onPressed: () => context.push('/notifications'),
+                )
+              : _NotificationBadge(uid: uid),
         ),
-        Consumer<AuthProvider>(
-          builder: (context, auth, _) {
-            final avatarUrl = auth.userModel?.avatarUrl ?? '';
+        // Avatar
+        Selector<AuthProvider, (String, String)>(
+          selector: (_, a) => (a.userModel?.avatarUrl ?? '', a.userModel?.username ?? 'U'),
+          builder: (context, data, _) {
+            final (avatarUrl, username) = data;
             return GestureDetector(
               onTap: () => context.push('/profile'),
               child: Padding(
@@ -110,11 +65,8 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
                       : null,
                   child: avatarUrl.isEmpty
                       ? Text(
-                          (auth.userModel?.username ?? 'U')
-                              .substring(0, 1)
-                              .toUpperCase(),
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
+                          username.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
                         )
                       : null,
                 ),
@@ -123,6 +75,68 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+/// Subscribes to the unread notifications stream once and keeps it alive.
+class _NotificationBadge extends StatefulWidget {
+  final String uid;
+  const _NotificationBadge({required this.uid});
+
+  @override
+  State<_NotificationBadge> createState() => _NotificationBadgeState();
+}
+
+class _NotificationBadgeState extends State<_NotificationBadge> {
+  late final Stream<int> _unreadStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _unreadStream = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('userId', isEqualTo: widget.uid)
+        .snapshots()
+        .map((snap) =>
+            snap.docs.where((d) => (d.data())['read'] == false).length);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: _unreadStream,
+      builder: (context, snap) {
+        final unread = snap.data ?? 0;
+        return Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+              onPressed: () => context.push('/notifications'),
+            ),
+            if (unread > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    color: kDestructive,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    unread > 9 ? '9+' : '$unread',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/theme_provider.dart';
 import '../../shared/providers/user_provider.dart';
+import '../../shared/widgets/paywall_sheet.dart';
 import 'preference_quiz_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -17,6 +20,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _dmNotificationsEnabled = true;
+  bool _nearbyGemsEnabled = true;
+  bool _commentsRepliesEnabled = true;
 
   // Chat schedule state
   bool _scheduleEnabled = false;
@@ -59,7 +64,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold)),
       ),
-      body: ListView(
+      body: ResponsiveBody(
+        maxWidth: AppBreakpoints.maxFormWidth,
+        child: ListView(
         children: [
           // Account
           _SectionHeader(title: 'Account'),
@@ -104,7 +111,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: chatEnabled,
             activeColor: kOrange,
-            onChanged: (v) => context.read<UserProvider>().updateChatEnabled(v),
+            onChanged: (v) async {
+              try {
+                await context.read<UserProvider>().updateChatEnabled(v);
+                AppToast.success(v ? 'Direct Messages enabled.' : 'Direct Messages disabled.');
+              } catch (_) {
+                AppToast.error('Failed to update setting.');
+              }
+            },
           ),
 
           // DND Schedule
@@ -137,6 +151,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) {
                 setState(() => _scheduleEnabled = v);
                 _saveSchedule();
+                AppToast.info(v ? 'Chat schedule enabled.' : 'Available at all times.');
               },
             ),
             if (_scheduleEnabled)
@@ -162,6 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (t != null) {
                               setState(() => _scheduleStart = t);
                               _saveSchedule();
+                              AppToast.success('Schedule updated.');
                             }
                           },
                         ),
@@ -178,6 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (t != null) {
                               setState(() => _scheduleEnd = t);
                               _saveSchedule();
+                              AppToast.success('Schedule updated.');
                             }
                           },
                         ),
@@ -204,19 +221,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       label: 'Light',
                       icon: Icons.light_mode_outlined,
                       selected: tp.mode == ThemeMode.light,
-                      onTap: () => tp.setMode(ThemeMode.light),
+                      onTap: () { tp.setMode(ThemeMode.light); AppToast.info('Light mode on.'); },
                     ),
                     _ThemeModeBtn(
                       label: 'System',
                       icon: Icons.brightness_auto_outlined,
                       selected: tp.mode == ThemeMode.system,
-                      onTap: () => tp.setMode(ThemeMode.system),
+                      onTap: () { tp.setMode(ThemeMode.system); AppToast.info('Following system theme.'); },
                     ),
                     _ThemeModeBtn(
                       label: 'Dark',
                       icon: Icons.dark_mode_outlined,
                       selected: tp.mode == ThemeMode.dark,
-                      onTap: () => tp.setMode(ThemeMode.dark),
+                      onTap: () { tp.setMode(ThemeMode.dark); AppToast.info('Dark mode on.'); },
                     ),
                   ],
                 ),
@@ -241,7 +258,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: _notificationsEnabled,
             activeColor: kOrange,
-            onChanged: (v) => setState(() => _notificationsEnabled = v),
+            onChanged: (v) {
+              setState(() => _notificationsEnabled = v);
+              AppToast.info(v ? 'Push notifications enabled.' : 'Push notifications disabled.');
+            },
           ),
           SwitchListTile(
             secondary: Container(
@@ -256,9 +276,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(fontSize: 14)),
             value: _dmNotificationsEnabled,
             activeColor: kOrange,
-            onChanged: (v) =>
-                setState(() => _dmNotificationsEnabled = v),
+            onChanged: (v) {
+              setState(() => _dmNotificationsEnabled = v);
+              AppToast.info(v ? 'Message notifications enabled.' : 'Message notifications disabled.');
+            },
           ),
+          SwitchListTile(
+            secondary: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.near_me_outlined, size: 20),
+            ),
+            title: const Text('Nearby Gems',
+                style: TextStyle(fontSize: 14)),
+            subtitle: const Text('Alert when near a saved post',
+                style: TextStyle(fontSize: 12, color: kMutedFg)),
+            value: _nearbyGemsEnabled,
+            activeColor: kOrange,
+            onChanged: (v) {
+              setState(() => _nearbyGemsEnabled = v);
+              AppToast.info(v ? 'Nearby gems alerts on.' : 'Nearby gems alerts off.');
+            },
+          ),
+          SwitchListTile(
+            secondary: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.comment_outlined, size: 20),
+            ),
+            title: const Text('Comments & Replies',
+                style: TextStyle(fontSize: 14)),
+            subtitle: const Text('Notify on new comments',
+                style: TextStyle(fontSize: 12, color: kMutedFg)),
+            value: _commentsRepliesEnabled,
+            activeColor: kOrange,
+            onChanged: (v) {
+              setState(() => _commentsRepliesEnabled = v);
+              AppToast.info(v ? 'Comment notifications on.' : 'Comment notifications off.');
+            },
+          ),
+
+          // Premium
+          _SectionHeader(title: 'Premium'),
+          Builder(builder: (ctx) {
+            final isPremium = auth.userModel?.isPremium ?? false;
+            return ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isPremium
+                        ? [kOrange, kAmber]
+                        : [Colors.grey.shade400, Colors.grey.shade500],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.rocket_launch_outlined,
+                    color: Colors.white, size: 18),
+              ),
+              title: Text(isPremium ? 'Premium Active' : 'Upgrade to Premium',
+                  style: const TextStyle(fontSize: 14)),
+              subtitle: Text(
+                isPremium ? 'Unlimited pins & posts' : 'Unlock unlimited saves & more',
+                style: const TextStyle(fontSize: 12, color: kMutedFg),
+              ),
+              trailing: const Icon(Icons.chevron_right, color: kMutedFg, size: 20),
+              onTap: () => PaywallSheet.show(ctx, PaywallTrigger.pins),
+            );
+          }),
 
           // Preferences / AI Style
           _SectionHeader(title: 'AI Discovery Style'),
@@ -324,6 +416,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 40),
         ],
+        ),
       ),
     );
   }
@@ -369,11 +462,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              await auth.resetPassword(email);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Reset link sent!'),
-                    backgroundColor: Colors.green));
+              final ok = await auth.resetPassword(email);
+              if (ok) {
+                AppToast.success('Reset link sent!');
+              } else {
+                AppToast.error(auth.errorMessage ?? 'Failed to send reset link.');
               }
             },
             child: const Text('Send Link'),
@@ -423,14 +516,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? () async {
                       Navigator.pop(ctx);
                       final ok = await auth.deleteAccount();
-                      if (!ok && mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(auth.errorMessage ??
-                                'Deletion failed'),
-                            backgroundColor: kDestructive,
-                          ),
-                        );
+                      if (!ok) {
+                        AppToast.error(auth.errorMessage ?? 'Account deletion failed.');
                       }
                     }
                   : null,
@@ -459,6 +546,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               Navigator.pop(context);
               await context.read<AuthProvider>().signOut();
+              AppToast.info('Signed out.');
               if (context.mounted) context.go('/login');
             },
             child: const Text('Log Out',

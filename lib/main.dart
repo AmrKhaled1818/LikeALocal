@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'data/services/notification_service.dart';
 import 'features/auth/login_screen.dart';
@@ -23,6 +24,7 @@ import 'features/search/search_screen.dart';
 import 'features/faq/faq_screen.dart';
 import 'features/saved/saved_posts_screen.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/leaderboard/leaderboard_screen.dart';
 import 'firebase_options.dart';
 import 'shared/providers/auth_provider.dart';
 import 'shared/providers/chat_provider.dart';
@@ -30,6 +32,7 @@ import 'shared/providers/connectivity_provider.dart';
 import 'shared/providers/posts_provider.dart';
 import 'shared/providers/theme_provider.dart';
 import 'shared/providers/user_provider.dart';
+import 'core/utils/responsive.dart';
 import 'shared/widgets/bottom_nav.dart';
 import 'shared/widgets/sidebar_menu.dart';
 import 'shared/widgets/top_bar.dart';
@@ -181,6 +184,10 @@ class _AppRouterState extends State<_AppRouter> {
           path: '/faq',
           builder: (_, __) => const FaqScreen(),
         ),
+        GoRoute(
+          path: '/leaderboard',
+          builder: (_, __) => const LeaderboardScreen(),
+        ),
       ],
       errorBuilder: (_, state) => Scaffold(
         body: Center(child: Text('Page not found: ${state.error}')),
@@ -219,6 +226,37 @@ class _MainShellState extends State<_MainShell> {
     final connectivity = context.watch<ConnectivityProvider>();
     final navShell = widget.navigationShell;
     final isCreate = navShell.currentIndex == 2;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isWide = screenWidth >= AppBreakpoints.tablet;
+
+    void onBranch(int i) =>
+        navShell.goBranch(i, initialLocation: i == navShell.currentIndex);
+
+    if (isWide) {
+      return Scaffold(
+        key: _scaffoldKey,
+        appBar: isCreate ? null : AppTopBar(scaffoldKey: _scaffoldKey),
+        drawer: const SidebarMenu(),
+        body: Column(
+          children: [
+            if (!connectivity.isOnline) const _OfflineBanner(),
+            Expanded(
+              child: Row(
+                children: [
+                  _AppNavigationRail(
+                    currentIndex: navShell.currentIndex,
+                    extended: screenWidth >= AppBreakpoints.desktop,
+                    onTap: onBranch,
+                  ),
+                  const VerticalDivider(width: 1, thickness: 1),
+                  Expanded(child: navShell),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       key: _scaffoldKey,
@@ -232,11 +270,80 @@ class _MainShellState extends State<_MainShell> {
       ),
       bottomNavigationBar: AppBottomNav(
         currentIndex: navShell.currentIndex,
-        onTap: (i) => navShell.goBranch(
-          i,
-          initialLocation: i == navShell.currentIndex,
-        ),
+        onTap: onBranch,
       ),
+    );
+  }
+}
+
+class _AppNavigationRail extends StatelessWidget {
+  final int currentIndex;
+  final bool extended;
+  final void Function(int) onTap;
+
+  const _AppNavigationRail({
+    required this.currentIndex,
+    required this.extended,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final chats = context.watch<ChatProvider>().chats;
+    int unread = 0;
+    for (final chat in chats) {
+      unread += chat.unreadCount[auth.uid] ?? 0;
+    }
+
+    return NavigationRail(
+      selectedIndex: currentIndex,
+      extended: extended,
+      onDestinationSelected: onTap,
+      selectedIconTheme: const IconThemeData(color: kOrange),
+      selectedLabelTextStyle: const TextStyle(
+          color: kOrange, fontWeight: FontWeight.w600, fontSize: 12),
+      unselectedLabelTextStyle:
+          const TextStyle(color: kMutedFg, fontSize: 12),
+      destinations: [
+        const NavigationRailDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: Text('Posts'),
+        ),
+        const NavigationRailDestination(
+          icon: Icon(Icons.map_outlined),
+          selectedIcon: Icon(Icons.map),
+          label: Text('Map'),
+        ),
+        NavigationRailDestination(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: const BoxDecoration(
+                color: kOrange, shape: BoxShape.circle),
+            child: const Icon(Icons.add, color: Colors.white, size: 20),
+          ),
+          label: const Text('Create'),
+        ),
+        NavigationRailDestination(
+          icon: Badge(
+            isLabelVisible: unread > 0,
+            label: Text('$unread'),
+            child: const Icon(Icons.chat_bubble_outline),
+          ),
+          selectedIcon: Badge(
+            isLabelVisible: unread > 0,
+            label: Text('$unread'),
+            child: const Icon(Icons.chat_bubble),
+          ),
+          label: const Text('Chat'),
+        ),
+        const NavigationRailDestination(
+          icon: Icon(Icons.search_outlined),
+          selectedIcon: Icon(Icons.search),
+          label: Text('Search'),
+        ),
+      ],
     );
   }
 }
