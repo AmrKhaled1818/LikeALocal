@@ -179,7 +179,27 @@ class _MapScreenState extends State<MapScreen>
 
   Future<bool> _ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      _showSnack('Location services are disabled.');
+      if (!mounted) return false;
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Location disabled'),
+          content: const Text(
+              'Turn on location services so the app can find your position.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Geolocator.openLocationSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
       return false;
     }
     var perm = await Geolocator.checkPermission();
@@ -187,7 +207,31 @@ class _MapScreenState extends State<MapScreen>
       perm = await Geolocator.requestPermission();
     }
     if (perm == LocationPermission.deniedForever) {
-      _showSnack('Location permission denied. Enable it in device settings.');
+      if (!mounted) return false;
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Permission denied'),
+          content: const Text(
+              'Location access was permanently denied. Enable it in app settings.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Geolocator.openAppSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+    if (perm == LocationPermission.denied) {
+      _showSnack('Location permission denied.');
       return false;
     }
     return true;

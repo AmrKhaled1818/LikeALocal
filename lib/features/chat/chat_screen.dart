@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/user_repo.dart';
 import '../../shared/providers/auth_provider.dart';
@@ -110,9 +111,10 @@ class _ChatScreenState extends State<ChatScreen>
     final chatProvider = context.watch<ChatProvider>();
     final chats = chatProvider.chats;
 
+    final dmChats = chats.where((c) => !c.chatId.startsWith('ai_')).toList();
     final filtered = _query.isEmpty
-        ? chats
-        : chats
+        ? dmChats
+        : dmChats
             .where((c) =>
                 c.chatId.toLowerCase().contains(_query.toLowerCase()) ||
                 c.lastMessage.toLowerCase().contains(_query.toLowerCase()))
@@ -160,9 +162,12 @@ class _AiChatTile extends StatelessWidget {
       onTap: () async {
         final chatProvider = context.read<ChatProvider>();
         final chatId = await chatProvider.getOrCreateAiChat(uid);
-        if (context.mounted) {
-          context.push('/conversation/$chatId');
+        if (!context.mounted) return;
+        if (chatId == null) {
+          AppToast.error('Could not open AI chat. Check your connection.');
+          return;
         }
+        context.push('/conversation/$chatId');
       },
       leading: Container(
         width: 48,

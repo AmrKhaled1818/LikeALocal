@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async' show StreamSubscription, TimeoutException;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -105,9 +105,13 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signIn(String email, String password) async {
     _setLoading(true);
     try {
-      await _authRepo.signIn(email, password);
+      await _authRepo.signIn(email, password)
+          .timeout(const Duration(seconds: 15));
       _clearError();
       return true;
+    } on TimeoutException {
+      _setError('Connection timed out. Check your network and try again.');
+      return false;
     } on FirebaseAuthException catch (e) {
       _setError(_friendlyAuthError(e));
       return false;
@@ -120,9 +124,13 @@ class AuthProvider extends ChangeNotifier {
       String email, String password, String username) async {
     _setLoading(true);
     try {
-      await _authRepo.register(email, password, username);
+      await _authRepo.register(email, password, username)
+          .timeout(const Duration(seconds: 15));
       _clearError();
       return true;
+    } on TimeoutException {
+      _setError('Connection timed out. Check your network and try again.');
+      return false;
     } on FirebaseAuthException catch (e) {
       _setError(_friendlyAuthError(e));
       return false;

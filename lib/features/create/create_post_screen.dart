@@ -670,6 +670,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
+  void _resetForm() {
+    _titleCtrl.clear();
+    _descCtrl.clear();
+    _locationCtrl.clear();
+    _tipsCtrl.clear();
+    _dishesCtrl.clear();
+    setState(() {
+      _selectedImages.clear();
+      _selectedCategory = 'Restaurant';
+      _pickedLat = null;
+      _pickedLng = null;
+    });
+  }
+
   Future<void> _submitPost() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -717,6 +731,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final uid = auth.uid;
         final newCount = (prefs.getInt('post_count_$uid') ?? 0) + 1;
         await prefs.setInt('post_count_$uid', newCount);
+        _resetForm();
         Fluttertoast.showToast(
           msg: 'Post shared! Karma +10',
           toastLength: Toast.LENGTH_SHORT,

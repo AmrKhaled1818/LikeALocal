@@ -171,6 +171,10 @@ class _FriendsSidebarState extends State<FriendsSidebar> {
     final chatId =
         await chatProvider.getOrCreateChat(auth.uid, match.uid);
     if (!mounted) return;
+    if (chatId == null) {
+      AppToast.error('Could not open chat. Check your connection.');
+      return;
+    }
     widget.onClose();
     context.push('/conversation/$chatId');
   }
@@ -260,6 +264,10 @@ class _UserSearchResultsState extends State<_UserSearchResults> {
               final chatId =
                   await chatProvider.getOrCreateChat(auth.uid, u.uid);
               if (!context.mounted) return;
+              if (chatId == null) {
+                AppToast.error('Could not open chat. Check your connection.');
+                return;
+              }
               widget.onClose();
               context.push('/conversation/$chatId');
             },

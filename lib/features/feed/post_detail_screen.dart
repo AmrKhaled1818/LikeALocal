@@ -831,7 +831,11 @@ class _MessageOwnerButton extends StatelessWidget {
               if (context.mounted) {
                 context.push('/conversation/$chatId');
               }
-            } catch (_) {}
+            } catch (_) {
+              if (context.mounted) {
+                AppToast.error('Could not open chat. Check your connection.');
+              }
+            }
           },
           icon: const Icon(Icons.message_outlined, size: 16),
           label: const Text('Message', style: TextStyle(fontSize: 13)),

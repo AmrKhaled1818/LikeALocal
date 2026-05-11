@@ -68,13 +68,23 @@ class ChatProvider extends ChangeNotifier {
     return _repo.getMessages(chatId);
   }
 
-  Future<String> getOrCreateChat(
+  Future<String?> getOrCreateChat(
       String currentUserId, String otherUserId) async {
-    return await _repo.getOrCreateChat(currentUserId, otherUserId);
+    try {
+      return await _repo.getOrCreateChat(currentUserId, otherUserId);
+    } catch (e) {
+      debugPrint('getOrCreateChat error: $e');
+      return null;
+    }
   }
 
-  Future<String> getOrCreateAiChat(String userId) async {
-    return await _repo.getOrCreateAiChat(userId);
+  Future<String?> getOrCreateAiChat(String userId) async {
+    try {
+      return await _repo.getOrCreateAiChat(userId);
+    } catch (e) {
+      debugPrint('getOrCreateAiChat error: $e');
+      return null;
+    }
   }
 
   Future<void> sendMessage(

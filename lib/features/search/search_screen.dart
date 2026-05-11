@@ -347,11 +347,22 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
+  bool _categoryMatches(PostModel p) {
+    if (_selectedCategory == 'All') return true;
+    return p.category.toLowerCase() == _selectedCategory.toLowerCase() ||
+        (_selectedCategory == 'Café' &&
+            (p.category == 'Café' || p.category == 'Cafe'));
+  }
+
   Widget _buildDiscovery() {
     return Consumer<PostsProvider>(
       builder: (context, postsProvider, _) {
-        // Trending = top 5 posts by upvotes
-        final trending = List<PostModel>.from(postsProvider.feedPosts)
+        final allPosts = _selectedCategory == 'All'
+            ? postsProvider.feedPosts
+            : postsProvider.feedPosts.where(_categoryMatches).toList();
+
+        // Trending = top 5 by upvotes (filtered by selected category)
+        final trending = List<PostModel>.from(allPosts)
           ..sort((a, b) => b.upvotes.compareTo(a.upvotes));
         final trendingList = trending.take(5).toList();
 
@@ -366,8 +377,12 @@ class _SearchScreenState extends State<SearchScreen>
               ),
               const SizedBox(height: 10),
               if (trendingList.isEmpty)
-                const Text('No posts yet',
-                    style: TextStyle(color: kMutedFg, fontSize: 13))
+                Text(
+                  _selectedCategory == 'All'
+                      ? 'No posts yet'
+                      : 'No trending $_selectedCategory spots yet',
+                  style: const TextStyle(color: kMutedFg, fontSize: 13),
+                )
               else
                 ...trendingList.asMap().entries.map((e) {
                   final p = e.value;
@@ -472,13 +487,15 @@ class _SearchScreenState extends State<SearchScreen>
               ],
 
               const SizedBox(height: 20),
-              const Text(
-                'Recommended For You',
-                style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                _selectedCategory == 'All'
+                    ? 'Recommended For You'
+                    : 'Top $_selectedCategory Spots',
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
-              _RecommendedSection(),
+              _RecommendedSection(category: _selectedCategory),
             ],
           ),
         );
@@ -838,14 +855,28 @@ class _PlaceGroupCard extends StatelessWidget {
 // ── Recommended section ──────────────────────────────────────────────────────
 
 class _RecommendedSection extends StatelessWidget {
+  final String category;
+  const _RecommendedSection({required this.category});
+
+  bool _matches(PostModel p) {
+    if (category == 'All') return true;
+    return p.category.toLowerCase() == category.toLowerCase() ||
+        (category == 'Café' && (p.category == 'Café' || p.category == 'Cafe'));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PostsProvider>(
       builder: (context, posts, _) {
-        final recommended = posts.feedPosts.take(3).toList();
+        final recommended =
+            posts.feedPosts.where(_matches).take(3).toList();
         if (recommended.isEmpty) {
-          return const Text('Explore posts to get recommendations',
-              style: TextStyle(color: kMutedFg, fontSize: 13));
+          return Text(
+            category == 'All'
+                ? 'Explore posts to get recommendations'
+                : 'No $category spots found yet',
+            style: const TextStyle(color: kMutedFg, fontSize: 13),
+          );
         }
         return Column(
           children: recommended

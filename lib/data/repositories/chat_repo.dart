@@ -33,14 +33,17 @@ class ChatRepo {
 
   Future<String> getOrCreateChat(
       String currentUserId, String otherUserId) async {
+    // Single where clause avoids the composite index requirement;
+    // isGroup is filtered client-side.
     final snap = await _db
         .collection('chats')
         .where('participants', arrayContains: currentUserId)
-        .where('isGroup', isEqualTo: false)
         .get();
 
     for (final doc in snap.docs) {
-      final participants = List<String>.from(doc.data()['participants'] ?? []);
+      final data = doc.data();
+      if (data['isGroup'] == true) continue;
+      final participants = List<String>.from(data['participants'] ?? []);
       if (participants.contains(otherUserId) && participants.length == 2) {
         return doc.id;
       }
@@ -130,17 +133,18 @@ class ChatRepo {
 
   Future<String> getOrCreateAiChat(String userId) async {
     final chatId = aiChatId(userId);
-    final doc = await _db.collection('chats').doc(chatId).get();
-    if (!doc.exists) {
-      final chat = ChatModel(
-        chatId: chatId,
-        participants: [userId, 'ai'],
-        isGroup: false,
-        lastMessage: 'I can help you find hidden gems in your area!',
-        lastMessageAt: Timestamp.now(),
-      );
-      await _db.collection('chats').doc(chatId).set(chat.toMap());
-    }
+    // merge:true → creates the document if it doesn't exist yet,
+    // or leaves existing message/lastMessage data untouched if it does.
+    // This avoids a GET on a possibly non-existent doc, which Firestore
+    // rules deny when resource.data is null.
+    await _db.collection('chats').doc(chatId).set(
+      {
+        'chatId': chatId,
+        'participants': [userId, 'ai'],
+        'isGroup': false,
+      },
+      SetOptions(merge: true),
+    );
     return chatId;
   }
 }
