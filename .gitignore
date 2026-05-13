@@ -51,6 +51,8 @@ android/app/google-services.json
 scripts/firebase-key.json
 **/*service-account*.json
 **/*firebase-key*.json
+*.jks
+*.keystore
 
 # Claude Code local settings
 .claude/
