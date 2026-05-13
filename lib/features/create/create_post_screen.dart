@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -37,7 +38,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _tipsCtrl = TextEditingController();
   final _dishesCtrl = TextEditingController();
 
-  final List<File> _selectedImages = [];
+  final List<XFile> _selectedImages = [];
+  XFile? _selectedVideo;
   static const int _maxImages = 5;
   String _selectedCategory = 'Restaurant';
   bool _posting = false;
@@ -49,11 +51,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   static const _categories = [
     'Restaurant',
-    'Bar',
     'Café',
     'Park',
     'Viewpoint',
     'Shop',
+    'Hotel',
+    'Museum',
+    'Mall',
   ];
 
   @override
@@ -98,7 +102,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         localTips: _tipsCtrl.text.trim(),
       );
       if (result.isNotEmpty && mounted) {
-        _titleCtrl.text = result.length > 500 ? result.substring(0, 497) + '...' : result;
+        _titleCtrl.text = result.length > 500 ? '${result.substring(0, 497)}...' : result;
         AppToast.success('Caption generated!');
       } else if (mounted) {
         AppToast.error('Could not generate caption. Try again.');
@@ -442,6 +446,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _dishesCtrl.clear();
     setState(() {
       _selectedImages.clear();
+      _selectedVideo = null;
       _pickedLat = null;
       _pickedLng = null;
       _selectedCategory = 'Restaurant';
@@ -468,12 +473,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: limitReached
-              ? [kDestructive.withOpacity(0.08), kDestructive.withOpacity(0.15)]
-              : [kAmber.withOpacity(0.08), kOrange.withOpacity(0.08)],
+              ? [kDestructive.withValues(alpha: 0.08), kDestructive.withValues(alpha: 0.15)]
+              : [kAmber.withValues(alpha: 0.08), kOrange.withValues(alpha: 0.08)],
         ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: limitReached ? kDestructive.withOpacity(0.4) : kAmber.withOpacity(0.3),
+          color: limitReached ? kDestructive.withValues(alpha: 0.4) : kAmber.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -518,6 +523,58 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Widget _buildImagePicker() {
     final remaining = _maxImages - _selectedImages.length;
+
+    // If a video is selected, show that instead of the image picker
+    if (_selectedVideo != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 120,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Icon(Icons.videocam, color: Colors.white54, size: 48),
+                Positioned(
+                  bottom: 8,
+                  left: 0,
+                  right: 0,
+                  child: Text(
+                    _selectedVideo!.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedVideo = null),
+                    child: const CircleAvatar(
+                      radius: 12,
+                      backgroundColor: Colors.black54,
+                      child: Icon(Icons.close,
+                          color: Colors.white, size: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text('Video selected — photos are disabled while a video is attached.',
+              style: TextStyle(color: kMutedFg, fontSize: 11)),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -541,26 +598,58 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             style: const TextStyle(color: kMutedFg, fontSize: 12),
           ),
         ] else
-          GestureDetector(
-            onTap: _addImages,
-            child: Container(
-              height: 160,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: kMuted,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+          Column(
+            children: [
+              GestureDetector(
+                onTap: _addImages,
+                child: Container(
+                  height: 130,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: kMuted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: kMutedFg.withValues(alpha: 0.3), width: 1.5),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_photo_alternate_outlined,
+                          size: 40, color: kMutedFg),
+                      SizedBox(height: 6),
+                      Text('Add photos (up to 5)',
+                          style: TextStyle(
+                              color: kMutedFg, fontSize: 14)),
+                    ],
+                  ),
+                ),
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_photo_alternate_outlined, size: 48, color: kMutedFg),
-                  SizedBox(height: 8),
-                  Text('Add photos (optional, up to 5)',
-                      style: TextStyle(color: kMutedFg, fontSize: 14)),
-                ],
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _pickVideo,
+                child: Container(
+                  height: 56,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: kMuted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: kMutedFg.withValues(alpha: 0.3), width: 1.5),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.videocam_outlined,
+                          size: 22, color: kMutedFg),
+                      SizedBox(width: 8),
+                      Text('Or add a video',
+                          style: TextStyle(
+                              color: kMutedFg, fontSize: 14)),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
       ],
     );
@@ -581,7 +670,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.file(_selectedImages[index], fit: BoxFit.cover),
+            child: kIsWeb
+                ? Image.network(_selectedImages[index].path, fit: BoxFit.cover)
+                : Image.file(File(_selectedImages[index].path),
+                    fit: BoxFit.cover),
           ),
         ),
         if (index == 0)
@@ -627,7 +719,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         decoration: BoxDecoration(
           color: kMuted,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: kMutedFg.withValues(alpha: 0.3), width: 1.5),
         ),
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -654,15 +746,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (picked.isEmpty) return;
 
       final toAdd = picked.take(remaining).toList();
-      final files = <File>[];
+      final files = <XFile>[];
       for (final x in toAdd) {
-        final file = File(x.path);
-        final bytes = await file.length();
+        final bytes = await x.length();
         if (bytes > 4 * 1024 * 1024) {
           AppToast.warning('One image was too large and was skipped.');
           continue;
         }
-        files.add(file);
+        files.add(x);
       }
       if (files.isNotEmpty) setState(() => _selectedImages.addAll(files));
     } catch (e) {
@@ -678,10 +769,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _dishesCtrl.clear();
     setState(() {
       _selectedImages.clear();
+      _selectedVideo = null;
       _selectedCategory = 'Restaurant';
       _pickedLat = null;
       _pickedLng = null;
     });
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final picker = ImagePicker();
+      final picked =
+          await picker.pickVideo(source: ImageSource.gallery);
+      if (picked == null) return;
+      final bytes = await picked.length();
+      if (bytes > 100 * 1024 * 1024) {
+        AppToast.warning('Video is too large (max 100 MB).');
+        return;
+      }
+      setState(() {
+        _selectedVideo = picked;
+        _selectedImages.clear(); // video and photos are mutually exclusive
+      });
+    } catch (e) {
+      AppToast.error('Error picking video: $e');
+    }
   }
 
   Future<void> _submitPost() async {
@@ -716,7 +828,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       // 45-second timeout so we never hang forever (Cloudinary + Firestore)
       final id = await context
           .read<PostsProvider>()
-          .createPost(post, _selectedImages)
+          .createPost(post, _selectedImages, videoFile: _selectedVideo)
           .timeout(
         const Duration(seconds: 45),
         onTimeout: () {
@@ -738,6 +850,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           backgroundColor: Colors.green,
           textColor: Colors.white,
         );
+        if (!mounted) return;
         context.go('/feed');
       } else if (mounted) {
         AppToast.error('Failed to post. Please try again.');

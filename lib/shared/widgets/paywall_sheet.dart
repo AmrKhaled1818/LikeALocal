@@ -142,7 +142,7 @@ class _TierCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isHighlighted
-            ? kOrange.withOpacity(0.08)
+            ? kOrange.withValues(alpha: 0.08)
             : Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(

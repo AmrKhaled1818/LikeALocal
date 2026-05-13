@@ -37,7 +37,7 @@ class _FriendsSidebarState extends State<FriendsSidebar> {
     return GestureDetector(
       onTap: widget.onClose,
       child: Material(
-        color: Colors.black.withOpacity(0.4),
+        color: Colors.black.withValues(alpha: 0.4),
         child: Row(
           children: [
             GestureDetector(

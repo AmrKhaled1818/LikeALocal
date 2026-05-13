@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
@@ -1157,7 +1157,7 @@ class _PulsingDotState extends State<_PulsingDot>
             height: 20 + _anim.value * 20,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.blue.withOpacity(0.25 * (1 - _anim.value)),
+              color: Colors.blue.withValues(alpha: 0.25 * (1 - _anim.value)),
             ),
           ),
           // Inner dot
@@ -1170,7 +1170,7 @@ class _PulsingDotState extends State<_PulsingDot>
               border: Border.all(color: Colors.white, width: 2.5),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.blue.withOpacity(0.5), blurRadius: 6),
+                    color: Colors.blue.withValues(alpha: 0.5), blurRadius: 6),
               ],
             ),
           ),

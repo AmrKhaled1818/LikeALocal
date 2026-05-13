@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive.dart';
+import '../../core/utils/vibe_score.dart';
 import '../../shared/providers/auth_provider.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageCtrl = PageController();
   int _page = 0;
+  String _selectedMood = '';
 
   static const _slides = [
     _SlideData(
@@ -45,6 +47,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _finish() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_seen', true);
+    if (_selectedMood.isNotEmpty) {
+      await prefs.setString('home_mood', _selectedMood);
+    }
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     context.go(auth.isLoggedIn ? '/feed' : '/login');
@@ -58,7 +63,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLast = _page == _slides.length - 1;
+    final pageCount = _slides.length + 1; // + mood picker
+    final isLast = _page == pageCount - 1;
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -73,14 +79,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: PageView.builder(
                       controller: _pageCtrl,
                       onPageChanged: (i) => setState(() => _page = i),
-                      itemCount: _slides.length,
-                      itemBuilder: (_, i) => _OnboardingSlide(data: _slides[i]),
+                      itemCount: pageCount,
+                      itemBuilder: (_, i) => i < _slides.length
+                          ? _OnboardingSlide(data: _slides[i])
+                          : _MoodPickSlide(
+                              selected: _selectedMood,
+                              onSelect: (m) =>
+                                  setState(() => _selectedMood = m),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(_slides.length, (i) {
+                    children: List.generate(pageCount, (i) {
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -146,6 +158,95 @@ class _SlideData {
   });
 }
 
+class _MoodPickSlide extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onSelect;
+
+  const _MoodPickSlide({required this.selected, required this.onSelect});
+
+  static const _moods = <(String, IconData, String, Color)>[
+    ('chill', Icons.spa_outlined, 'Easygoing — cafés, parks, viewpoints',
+        Color(0xFF0EA5E9)),
+    ('adventurous', Icons.hiking_outlined,
+        'Out exploring — rooftops, trails, nightlife', Color(0xFFE8580A)),
+    ('hungry', Icons.restaurant_outlined,
+        'On the hunt for food — restaurants & eats', Color(0xFFD4820A)),
+    ('cultural', Icons.museum_outlined,
+        'Soaking up the city — history, art, heritage', Color(0xFF7C3AED)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("What's your vibe today?",
+              style: TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.bold, color: kDark)),
+          const SizedBox(height: 6),
+          const Text(
+            'We\'ll tune your feed to match. You can change it anytime from the feed.',
+            style: TextStyle(fontSize: 14, color: kMutedFg, height: 1.5),
+          ),
+          const SizedBox(height: 20),
+          ..._moods.map((m) {
+            final (value, icon, subtitle, color) = m;
+            final isSel = selected == value;
+            return GestureDetector(
+              onTap: () => onSelect(isSel ? '' : value),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isSel ? color.withValues(alpha: 0.08) : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: isSel ? color : kMuted, width: isSel ? 2 : 1),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icon, color: color, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(kMoodLabels[value] ?? value,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: kDark)),
+                          Text(subtitle,
+                              style: const TextStyle(
+                                  fontSize: 12, color: kMutedFg)),
+                        ],
+                      ),
+                    ),
+                    if (isSel)
+                      Icon(Icons.check_circle, color: color, size: 20),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 class _OnboardingSlide extends StatelessWidget {
   final _SlideData data;
 
@@ -162,7 +263,7 @@ class _OnboardingSlide extends StatelessWidget {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: data.color.withOpacity(0.12),
+              color: data.color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(data.icon, color: data.color, size: 56),

@@ -1,16 +1,19 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast_utils.dart';
+import '../../core/utils/vibe_score.dart';
 import '../../data/models/post_model.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import 'super_user_badge.dart';
+import 'vibe_badge.dart';
+import 'crowd_badge.dart';
 import 'paywall_sheet.dart';
 
 const _categoryColors = {
@@ -148,6 +151,17 @@ class _PostCardState extends State<PostCard>
             ? (a.userModel?.avatarUrl ?? post.userAvatarUrl)
             : post.userAvatarUrl);
 
+    // Vibe Match Score — recomputes on mood change or when saved style changes.
+    final mood = context.select<PostsProvider, String>((p) => p.mood);
+    context.select<AuthProvider, String>((a) {
+      final pr = a.userModel?.preferences ?? const {};
+      return '${pr['budget']}|${pr['atmosphere']}|'
+          '${(pr['favCategories'] as List?)?.join(',') ?? ''}';
+    });
+    final vibeScore = VibeScore.forPost(
+        post, context.read<AuthProvider>().userModel?.preferences,
+        mood: mood);
+
     return GestureDetector(
       onTap: () => context.push('/post/${post.postId}'),
       onDoubleTap: _onDoubleTap,
@@ -158,11 +172,11 @@ class _PostCardState extends State<PostCard>
             margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
             decoration: BoxDecoration(
               color: post.isSuperUser
-                  ? (isDark ? kAmber.withOpacity(0.15) : kSuperUserBg)
+                  ? (isDark ? kAmber.withValues(alpha: 0.15) : kSuperUserBg)
                   : Theme.of(context).colorScheme.surface,
               border: Border.all(
                 color: post.isSuperUser
-                    ? kAmber.withOpacity(0.5)
+                    ? kAmber.withValues(alpha: 0.5)
                     : Theme.of(context).colorScheme.outlineVariant,
                 width: post.isSuperUser ? 1.5 : 1,
               ),
@@ -240,7 +254,7 @@ class _PostCardState extends State<PostCard>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 7, vertical: 3),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withOpacity(0.12),
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -255,7 +269,7 @@ class _PostCardState extends State<PostCard>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: catColor.withOpacity(0.12),
+                          color: catColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -270,19 +284,32 @@ class _PostCardState extends State<PostCard>
                   ),
                 ),
 
-                // Title + description
+                // Title + vibe match + description
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        post.title,
-                        style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurface,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              post.title,
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: VibeBadge(score: vibeScore),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -292,13 +319,20 @@ class _PostCardState extends State<PostCard>
                         style:
                             const TextStyle(color: kMutedFg, fontSize: 13),
                       ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: CrowdBadge(post: post),
+                      ),
                     ],
                   ),
                 ),
 
-                // Images — single or carousel
+                // Images or video indicator
                 if (post.allImageUrls.isNotEmpty)
-                  _buildImageSection(context, post.allImageUrls),
+                  _buildImageSection(context, post.allImageUrls, hasVideo: post.videoUrl.isNotEmpty)
+                else if (post.videoUrl.isNotEmpty)
+                  _buildVideoPlaceholder(context),
 
                 // Actions row
                 Padding(
@@ -450,24 +484,70 @@ class _PostCardState extends State<PostCard>
     );
   }
 
-  Widget _buildImageSection(BuildContext context, List<String> urls) {
+  Widget _buildVideoPlaceholder(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      height: 160,
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.play_circle_outline, color: Colors.white70, size: 48),
+            SizedBox(height: 6),
+            Text('Tap to watch video',
+                style: TextStyle(color: Colors.white60, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageSection(BuildContext context, List<String> urls, {bool hasVideo = false}) {
     if (urls.length == 1) {
       return Padding(
         padding: const EdgeInsets.only(top: 10),
-        child: CachedNetworkImage(
-          imageUrl: urls.first,
-          height: 200,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          placeholder: (_, __) => Container(
-            height: 200,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
-          errorWidget: (_, __, ___) => Container(
-            height: 200,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: const Icon(Icons.image_outlined, color: kMutedFg),
-          ),
+        child: Stack(
+          children: [
+            CachedNetworkImage(
+              imageUrl: urls.first,
+              height: 200,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                height: 200,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              errorWidget: (_, __, ___) => Container(
+                height: 200,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: const Icon(Icons.image_outlined, color: kMutedFg),
+              ),
+            ),
+            if (hasVideo)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.videocam, color: Colors.white, size: 13),
+                      SizedBox(width: 3),
+                      Text('Video', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       );
     }
@@ -513,7 +593,7 @@ class _PostCardState extends State<PostCard>
                 width: _imageIndex == i ? 16 : 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: _imageIndex == i ? kOrange : Colors.white.withOpacity(0.6),
+                  color: _imageIndex == i ? kOrange : Colors.white.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(3),
                 ),
               )),
@@ -654,7 +734,7 @@ class _VotePill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _btn(Icons.arrow_upward_rounded, upvotes, userVote == 1, kOrange, onUpvote),
-          Container(width: 1, height: 14, color: kMutedFg.withOpacity(0.25)),
+          Container(width: 1, height: 14, color: kMutedFg.withValues(alpha: 0.25)),
           _btn(Icons.arrow_downward_rounded, downvotes, userVote == -1, Colors.blue, onDownvote),
         ],
       ),

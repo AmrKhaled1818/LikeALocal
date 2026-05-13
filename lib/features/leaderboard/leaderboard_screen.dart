@@ -162,10 +162,10 @@ class _PodiumSlot extends StatelessWidget {
         Container(
           height: height,
           decoration: BoxDecoration(
-            color: (_colors[rank]!).withOpacity(0.18),
+            color: (_colors[rank]!).withValues(alpha: 0.18),
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(8)),
-            border: Border.all(color: _colors[rank]!.withOpacity(0.4)),
+            border: Border.all(color: _colors[rank]!.withValues(alpha: 0.4)),
           ),
           child: Center(
             child: Text(
@@ -248,7 +248,7 @@ class _LeaderboardTile extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: kOrange.withOpacity(0.1),
+              color: kOrange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(

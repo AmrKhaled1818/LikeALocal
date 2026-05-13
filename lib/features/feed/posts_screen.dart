@@ -5,10 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/vibe_score.dart';
 import '../../data/models/post_model.dart';
+import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import '../../core/utils/responsive.dart';
 import '../../shared/widgets/error_retry.dart';
+import '../../shared/widgets/mood_selector.dart';
 import '../../shared/widgets/post_card.dart';
 
 class PostsScreen extends StatefulWidget {
@@ -68,11 +71,19 @@ class _PostsScreenState extends State<PostsScreen>
   }
 
   Widget _buildFeed(BuildContext context) {
-    return Selector<PostsProvider, (List<PostModel>, bool, bool)>(
-      selector: (_, p) => (p.feedPosts, p.isLoadingMore, p.hasMore),
+    return Selector<PostsProvider, (List<PostModel>, bool, bool, String, bool)>(
+      selector: (_, p) => (p.feedPosts, p.isLoadingMore, p.hasMore, p.mood, p.showSuperUsersFirst),
       builder: (context, data, _) {
-        final (feedPosts, isLoadingMore, hasMore) = data;
+        final (_, isLoadingMore, hasMore, mood, _) = data;
+        // Rebuild (→ re-rank) whenever the user's saved style changes.
+        context.select<AuthProvider, String>((a) {
+          final pr = a.userModel?.preferences ?? const {};
+          return '${pr['budget']}|${pr['atmosphere']}|'
+              '${(pr['favCategories'] as List?)?.join(',') ?? ''}';
+        });
         final posts = context.read<PostsProvider>();
+        final prefs = context.read<AuthProvider>().userModel?.preferences;
+        final feedPosts = posts.rankedFeed(prefs);
         return RefreshIndicator(
           color: kOrange,
           onRefresh: () async {
@@ -95,23 +106,60 @@ class _PostsScreenState extends State<PostsScreen>
             controller: _scrollCtrl,
             cacheExtent: 500,
             slivers: [
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Hidden Gems Feed',
-                        style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Hidden Gems Feed',
+                            style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                'Super Users First',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: posts.showSuperUsersFirst ? kOrange : kMutedFg,
+                                ),
+                              ),
+                              Switch(
+                                value: posts.showSuperUsersFirst,
+                                onChanged: (_) {
+                                  HapticFeedback.lightImpact();
+                                  posts.toggleSuperUsersFirst();
+                                },
+                                activeColor: kOrange,
+                                activeTrackColor: kOrange.withValues(alpha: 0.3),
+                                inactiveThumbColor: kMutedFg,
+                                inactiveTrackColor: Colors.black26,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
-                        'Discover local spots shared by the community',
-                        style: TextStyle(color: kMutedFg, fontSize: 13),
+                        mood.isEmpty
+                            ? 'Discover local spots shared by the community'
+                            : 'Tuned for a ${kMoodLabels[mood] ?? mood} mood',
+                        style: const TextStyle(color: kMutedFg, fontSize: 13),
+                      ),
+                      const SizedBox(height: 10),
+                      MoodSelector(
+                        selected: mood,
+                        onSelect: (m) {
+                          HapticFeedback.selectionClick();
+                          posts.setMood(m);
+                        },
                       ),
                     ],
                   ),
@@ -249,7 +297,7 @@ class _EmptyFeedState extends StatelessWidget {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: kOrange.withOpacity(0.08),
+                color: kOrange.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.explore_outlined,

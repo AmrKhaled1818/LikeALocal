@@ -192,7 +192,7 @@ class AppTheme {
               (s) => s.contains(WidgetState.selected) ? kOrange : null),
           trackColor: WidgetStateProperty.resolveWith(
               (s) => s.contains(WidgetState.selected)
-                  ? kOrange.withOpacity(0.4)
+                  ? kOrange.withValues(alpha: 0.4)
                   : null),
         ),
       );

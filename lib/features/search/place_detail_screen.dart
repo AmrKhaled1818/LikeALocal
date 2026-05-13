@@ -1,6 +1,6 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -414,7 +414,7 @@ class _MergedReviewsState extends State<_MergedReviews> {
 
   @override
   void dispose() {
-    for (final s in _subs) s.cancel();
+    for (final s in _subs) { s.cancel(); }
     super.dispose();
   }
 

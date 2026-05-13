@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 import '../../core/utils/map_utils.dart';
 import '../../core/utils/toast_utils.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,7 @@ import '../../shared/providers/posts_provider.dart';
 import '../../shared/widgets/error_retry.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/super_user_badge.dart';
+import '../../shared/widgets/crowd_badge.dart';
 import '../../shared/widgets/paywall_sheet.dart';
 import '../../core/utils/responsive.dart';
 import '../../data/services/ai_service.dart';
@@ -44,6 +46,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   int _imageIndex = 0;
   PageController? _imagePageCtrl;
 
+  VideoPlayerController? _videoCtrl;
+  String? _loadedVideoUrl;
+
   String _resolveAvatar(PostModel post, AuthProvider auth) {
     if (post.userId == auth.uid) {
       return auth.userModel?.avatarUrl ?? post.userAvatarUrl;
@@ -55,7 +60,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void dispose() {
     _commentCtrl.dispose();
     _imagePageCtrl?.dispose();
+    _videoCtrl?.dispose();
     super.dispose();
+  }
+
+  void _initVideoIfNeeded(String url) {
+    if (url.isEmpty || url == _loadedVideoUrl) return;
+    _loadedVideoUrl = url;
+    _videoCtrl?.dispose();
+    _videoCtrl = VideoPlayerController.networkUrl(Uri.parse(url))
+      ..initialize().then((_) {
+        if (mounted) setState(() {});
+      });
   }
 
   @override
@@ -223,7 +239,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               width: _imageIndex == i ? 16 : 6,
               height: 6,
               decoration: BoxDecoration(
-                color: _imageIndex == i ? kOrange : Colors.white.withOpacity(0.6),
+                color: _imageIndex == i ? kOrange : Colors.white.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(3),
               ),
             )),
@@ -246,6 +262,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Widget _buildScaffold(BuildContext context, PostModel post, bool isOwner, AuthProvider auth) {
     _lazyInit(post, auth);
+    if (post.videoUrl.isNotEmpty) _initVideoIfNeeded(post.videoUrl);
     return Scaffold(
       body: ResponsiveBody(
         maxWidth: AppBreakpoints.maxDetailWidth,
@@ -358,18 +375,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 color: null)),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: kMuted,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(post.category,
-                              style: const TextStyle(
-                                  color: kMutedFg, fontSize: 12)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: kMuted,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(post.category,
+                                  style: const TextStyle(
+                                      color: kMutedFg, fontSize: 12)),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: CrowdBadge(
+                                  post: post, autoGenerate: true, dense: false),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 10),
+                        _CheckInButton(postId: post.postId),
+                        if (post.videoUrl.isNotEmpty && _videoCtrl != null)
+                          _VideoSection(controller: _videoCtrl!),
                         const SizedBox(height: 12),
 
                         // ── Vote / save / time row ──────────────────────
@@ -764,16 +794,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      final ok = await context.read<PostsProvider>().deletePost(widget.postId);
-      if (mounted) {
-        if (ok) {
-          AppToast.success('Post deleted.');
-          context.go('/feed');
-        } else {
-          AppToast.error('Failed to delete post. Try again.');
-        }
-      }
+    if (confirm != true) return;
+    if (!mounted) return;
+    final postsProvider = context.read<PostsProvider>();
+    final router = GoRouter.of(context);
+    final ok = await postsProvider.deletePost(widget.postId);
+    if (!mounted) return;
+    if (ok) {
+      AppToast.success('Post deleted.');
+      router.go('/feed');
+    } else {
+      AppToast.error('Failed to delete post. Try again.');
     }
   }
 
@@ -803,6 +834,60 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+}
+
+class _CheckInButton extends StatefulWidget {
+  final String postId;
+  const _CheckInButton({required this.postId});
+
+  @override
+  State<_CheckInButton> createState() => _CheckInButtonState();
+}
+
+class _CheckInButtonState extends State<_CheckInButton> {
+  bool _busy = false;
+  bool _done = false;
+
+  Future<void> _checkIn() async {
+    if (_busy || _done) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.uid.isEmpty) return;
+    setState(() => _busy = true);
+    HapticFeedback.lightImpact();
+    final ok = await context
+        .read<PostsProvider>()
+        .checkInPost(widget.postId, auth.uid);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _done = ok;
+    });
+    if (ok) {
+      AppToast.success('Checked in! Karma +1');
+    } else {
+      AppToast.error('Could not check in. Try again.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: (_busy || _done) ? null : _checkIn,
+        icon: Icon(_done ? Icons.check_circle : Icons.where_to_vote_outlined,
+            size: 18),
+        label: Text(_done ? "You're here" : 'I\'m here now — check in'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _done ? const Color(0xFF16A34A) : kOrange,
+          side: BorderSide(
+              color: (_done ? const Color(0xFF16A34A) : kOrange)
+                  .withValues(alpha: 0.5)),
+          padding: const EdgeInsets.symmetric(vertical: 11),
+        ),
+      ),
+    );
   }
 }
 
@@ -1141,15 +1226,15 @@ class _LocalInsightCardState extends State<_LocalInsightCard> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF8B5CF6).withOpacity(0.08),
-            const Color(0xFFEC4899).withOpacity(0.06),
+            const Color(0xFF8B5CF6).withValues(alpha: 0.08),
+            const Color(0xFFEC4899).withValues(alpha: 0.06),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1206,6 +1291,100 @@ class _LocalInsightCardState extends State<_LocalInsightCard> {
           else if (!_loading)
             const Text('Generating insight...',
                 style: TextStyle(color: kMutedFg, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Video player section ───────────────────────────────────────────────────
+
+class _VideoSection extends StatefulWidget {
+  final VideoPlayerController controller;
+  const _VideoSection({required this.controller});
+
+  @override
+  State<_VideoSection> createState() => _VideoSectionState();
+}
+
+class _VideoSectionState extends State<_VideoSection> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_rebuild);
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = widget.controller;
+    if (!ctrl.value.isInitialized) {
+      return const SizedBox(
+        height: 200,
+        child: Center(child: CircularProgressIndicator(color: kOrange)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Video',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, fontSize: 14)),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: ctrl.value.aspectRatio,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  VideoPlayer(ctrl),
+                  GestureDetector(
+                    onTap: () {
+                      if (ctrl.value.isPlaying) {
+                        ctrl.pause();
+                      } else {
+                        ctrl.play();
+                      }
+                    },
+                    child: AnimatedOpacity(
+                      opacity: ctrl.value.isPlaying ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black38,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(14),
+                        child: const Icon(Icons.play_arrow,
+                            color: Colors.white, size: 36),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          VideoProgressIndicator(
+            ctrl,
+            allowScrubbing: true,
+            colors: const VideoProgressColors(
+              playedColor: kOrange,
+              bufferedColor: Colors.white24,
+              backgroundColor: Colors.black12,
+            ),
+          ),
         ],
       ),
     );

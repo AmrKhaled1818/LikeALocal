@@ -65,7 +65,7 @@ class NotificationsScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.notifications_none,
-                      size: 64, color: kMutedFg.withOpacity(0.4)),
+                      size: 64, color: kMutedFg.withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
                   const Text('No notifications yet',
                       style: TextStyle(
@@ -123,7 +123,12 @@ class _NotificationTile extends StatelessWidget {
       case 'comment':
         return Icons.comment_outlined;
       case 'dm':
+      case 'message':
         return Icons.message_outlined;
+      case 'superuser':
+        return Icons.workspace_premium_outlined;
+      case 'nearby':
+        return Icons.near_me_outlined;
       default:
         return Icons.notifications_outlined;
     }
@@ -136,7 +141,12 @@ class _NotificationTile extends StatelessWidget {
       case 'comment':
         return kOrange;
       case 'dm':
+      case 'message':
         return const Color(0xFF8B5CF6);
+      case 'superuser':
+        return kAmber;
+      case 'nearby':
+        return Colors.teal;
       default:
         return kMutedFg;
     }
@@ -147,7 +157,7 @@ class _NotificationTile extends StatelessWidget {
     final time = timeago.format(notif.createdAt.toDate(), allowFromNow: true);
 
     return ListTile(
-      tileColor: notif.read ? null : kOrange.withOpacity(0.04),
+      tileColor: notif.read ? null : kOrange.withValues(alpha: 0.04),
       onTap: () {
         // Mark by document ID — avoids full collection scan and
         // accidental multi-match when two notifications share the same text
@@ -165,7 +175,7 @@ class _NotificationTile extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: _iconColor.withOpacity(0.12),
+          color: _iconColor.withValues(alpha: 0.12),
           shape: BoxShape.circle,
         ),
         child: Icon(_icon, color: _iconColor, size: 20),

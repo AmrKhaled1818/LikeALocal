@@ -110,7 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Let others send you DMs',
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: chatEnabled,
-            activeColor: kOrange,
+            activeThumbColor: kOrange,
             onChanged: (v) async {
               try {
                 await context.read<UserProvider>().updateChatEnabled(v);
@@ -147,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: const TextStyle(fontSize: 12, color: kMutedFg),
               ),
               value: _scheduleEnabled,
-              activeColor: kOrange,
+              activeThumbColor: kOrange,
               onChanged: (v) {
                 setState(() => _scheduleEnabled = v);
                 _saveSchedule();
@@ -257,7 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Likes, comments, and mentions',
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: _notificationsEnabled,
-            activeColor: kOrange,
+            activeThumbColor: kOrange,
             onChanged: (v) {
               setState(() => _notificationsEnabled = v);
               AppToast.info(v ? 'Push notifications enabled.' : 'Push notifications disabled.');
@@ -275,7 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Message Notifications',
                 style: TextStyle(fontSize: 14)),
             value: _dmNotificationsEnabled,
-            activeColor: kOrange,
+            activeThumbColor: kOrange,
             onChanged: (v) {
               setState(() => _dmNotificationsEnabled = v);
               AppToast.info(v ? 'Message notifications enabled.' : 'Message notifications disabled.');
@@ -295,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Alert when near a saved post',
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: _nearbyGemsEnabled,
-            activeColor: kOrange,
+            activeThumbColor: kOrange,
             onChanged: (v) {
               setState(() => _nearbyGemsEnabled = v);
               AppToast.info(v ? 'Nearby gems alerts on.' : 'Nearby gems alerts off.');
@@ -315,7 +315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Notify on new comments',
                 style: TextStyle(fontSize: 12, color: kMutedFg)),
             value: _commentsRepliesEnabled,
-            activeColor: kOrange,
+            activeThumbColor: kOrange,
             onChanged: (v) {
               setState(() => _commentsRepliesEnabled = v);
               AppToast.info(v ? 'Comment notifications on.' : 'Comment notifications off.');
@@ -434,11 +434,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSchedule() async {
     final user = context.read<AuthProvider>().userModel;
     if (user == null) return;
-    await context.read<UserProvider>().updatePreferences({
+    final userProvider = context.read<UserProvider>();
+    await userProvider.updatePreferences({
       ...user.preferences,
     });
     // Save schedule to user doc directly
-    await context.read<UserProvider>().updateChatSchedule({
+    await userProvider.updateChatSchedule({
       'enabled': _scheduleEnabled,
       'startHour': _scheduleStart.hour,
       'startMinute': _scheduleStart.minute,

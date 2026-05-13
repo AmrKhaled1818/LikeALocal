@@ -128,7 +128,7 @@ class _SectionState extends State<_Section> {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: kOrange.withOpacity(0.1),
+                      color: kOrange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(widget.icon, color: kOrange, size: 18),

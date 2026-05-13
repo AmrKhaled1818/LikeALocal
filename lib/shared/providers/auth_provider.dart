@@ -63,11 +63,13 @@ class AuthProvider extends ChangeNotifier {
           return; // skip pre-existing notifications on login
         }
         // Only react to newly added docs; filter type client-side (avoids composite index)
+        const pushableTypes = {'upvote', 'superuser', 'comment', 'message', 'nearby'};
         for (final change in snap.docChanges) {
           if (change.type != DocumentChangeType.added) continue;
           final data = change.doc.data();
-          if (data == null || (data['type'] as String?) != 'upvote') continue;
-          final title = (data['title'] as String?) ?? 'New upvote';
+          final type = data?['type'] as String?;
+          if (data == null || !pushableTypes.contains(type)) continue;
+          final title = (data['title'] as String?) ?? 'LikeALocal';
           final body = (data['body'] as String?) ?? '';
           NotificationService.showLocalNotification(title, body);
         }

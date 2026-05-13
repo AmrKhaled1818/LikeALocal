@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast_utils.dart';
@@ -165,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 20,
                         offset: const Offset(0, 4),
                       ),
@@ -394,7 +396,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Image.network(
-                                'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png',
+                                'https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png',
                                 height: 18,
                                 width: 18,
                                 errorBuilder: (_, __, ___) => const Icon(
@@ -453,8 +455,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!success && auth.errorMessage != null) {
       AppToast.error(auth.errorMessage!);
+    } else if (success) {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('onboarding_seen') ?? false)) {
+        if (context.mounted) context.go('/onboarding');
+      } else {
+        if (context.mounted) context.go('/feed');
+      }
     }
-    // GoRouter redirects automatically via auth state
   }
 
   Future<void> _googleSignIn(BuildContext context) async {
@@ -462,6 +470,13 @@ class _LoginScreenState extends State<LoginScreen> {
     final success = await auth.signInWithGoogle();
     if (!success && auth.errorMessage != null) {
       AppToast.error(auth.errorMessage!);
+    } else if (success) {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('onboarding_seen') ?? false)) {
+        if (context.mounted) context.go('/onboarding');
+      } else {
+        if (context.mounted) context.go('/feed');
+      }
     }
   }
 

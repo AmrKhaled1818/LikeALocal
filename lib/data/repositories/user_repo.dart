@@ -4,6 +4,9 @@ import '../models/user_model.dart';
 class UserRepo {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Karma at which a user is auto-promoted to "Super User".
+  static const int superUserKarmaThreshold = 100;
+
   Stream<UserModel?> watchUser(String uid) {
     return _db.collection('users').doc(uid).snapshots().map((doc) {
       if (!doc.exists) return null;
@@ -21,21 +24,57 @@ class UserRepo {
     await _db.collection('users').doc(uid).update(data);
   }
 
-  Future<void> addKarma(String uid, int amount) async {
+  /// Awards [amount] karma. Auto-promotes the user to Super User once their
+  /// karma crosses [superUserKarmaThreshold] and fires a one-time in-app
+  /// notification. Returns true if this award triggered the promotion.
+  Future<bool> addKarma(String uid, int amount) async {
     final ref = _db.collection('users').doc(uid);
+    bool promoted = false;
+    String username = '';
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) return;
       final current = snap.data()!;
+      username = (current['username'] as String?) ?? '';
+      final wasSuperUser = current['isSuperUser'] == true;
       final newKarma = (current['karma'] ?? 0) + amount;
-      final newScore = (newKarma.toDouble()).clamp(0.0, 100.0);
-      final isSuperUser = newKarma >= 100;
+      final isSuperUser = wasSuperUser || newKarma >= superUserKarmaThreshold;
+      promoted = !wasSuperUser && isSuperUser;
       tx.update(ref, {
         'karma': newKarma,
-        'contributionScore': newScore,
+        'contributionScore': newKarma.toDouble(),
         'isSuperUser': isSuperUser,
       });
     });
+
+    if (promoted) {
+      try {
+        // Stamp existing posts so they immediately render with the Super User badge.
+        final posts =
+            await _db.collection('posts').where('userId', isEqualTo: uid).get();
+        if (posts.docs.isNotEmpty) {
+          final batch = _db.batch();
+          for (final doc in posts.docs) {
+            batch.update(doc.reference, {'isSuperUser': true});
+          }
+          await batch.commit();
+        }
+        final notifRef = _db.collection('notifications').doc();
+        await notifRef.set({
+          'notifId': notifRef.id,
+          'userId': uid,
+          'type': 'superuser',
+          'title': 'You\'re now a Super User! 🎉',
+          'body': 'Thanks for being an awesome local'
+              '${username.isNotEmpty ? ', $username' : ''} — your posts now '
+              'appear first and the AI daily limit no longer applies.',
+          'postId': null,
+          'read': false,
+          'createdAt': Timestamp.now(),
+        });
+      } catch (_) {}
+    }
+    return promoted;
   }
 
   Future<void> updateFcmToken(String uid, String token) async {

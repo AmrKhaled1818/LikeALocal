@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -32,6 +33,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Position? _position;
   String? _otherUsername;
 
+  // Typing-indicator state
+  late final ChatProvider _chatRef;
+  late final String _uid;
+  late final Stream<bool> _typingStream;
+  Timer? _typingTimer;
+  bool _amTyping = false;
+
   int _todayAiCount = 0;
   bool _limitLoaded = false;
 
@@ -62,13 +70,38 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void initState() {
     super.initState();
+    _chatRef = context.read<ChatProvider>();
+    _uid = context.read<AuthProvider>().uid;
+    _typingStream = _chatRef.watchTyping(widget.chatId, _uid);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      context.read<ChatProvider>().markRead(widget.chatId, auth.uid);
-      if (!_isAiChat) _loadOtherUsername(auth.uid);
-      if (_isAiChat) _loadAiUsage(auth.uid);
+      _chatRef.markRead(widget.chatId, _uid);
+      if (!_isAiChat) _loadOtherUsername(_uid);
+      if (_isAiChat) _loadAiUsage(_uid);
     });
     if (_isAiChat) _fetchLocation();
+  }
+
+  void _onTextChanged(String text) {
+    if (_isAiChat || _uid.isEmpty) return;
+    if (text.trim().isEmpty) {
+      _stopTyping();
+      return;
+    }
+    if (!_amTyping) {
+      _amTyping = true;
+      _chatRef.setTyping(widget.chatId, _uid, true);
+    }
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 3), _stopTyping);
+  }
+
+  void _stopTyping() {
+    _typingTimer?.cancel();
+    _typingTimer = null;
+    if (_amTyping) {
+      _amTyping = false;
+      if (_uid.isNotEmpty) _chatRef.setTyping(widget.chatId, _uid, false);
+    }
   }
 
   Future<void> _loadAiUsage(String uid) async {
@@ -126,7 +159,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
     try {
       final perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) return;
+          perm == LocationPermission.deniedForever) {
+        return;
+      }
       final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.low);
       if (mounted) setState(() => _position = pos);
@@ -135,6 +170,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    _stopTyping();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -192,7 +228,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (_isAiChat && !isSuperUser && !isPremium && _limitReached) return;
 
     final chatProvider = context.read<ChatProvider>();
+    final postsProvider = context.read<PostsProvider>();
     _msgCtrl.clear();
+    _stopTyping();
     setState(() => _sending = true);
 
     try {
@@ -208,7 +246,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       if (_isAiChat && auth.userModel != null) {
         // Use the already-loaded message list — no redundant Firestore fetch
         final messages = _currentMessages;
-        final allPosts = context.read<PostsProvider>().feedPosts;
+        final allPosts = postsProvider.feedPosts;
         final availablePlaces = allPosts.map((p) => '${p.title} in ${p.location}').join(', ');
 
         final reply = await AIService().getAIResponse(
@@ -267,17 +305,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
       // User query: title hit = strongest, then location, category, description
       for (final token in queryTokens) {
-        if (titleLower.contains(token)) score += 8;
-        else if (locationLower.contains(token)) score += 4;
-        else if (catLower.contains(token)) score += 3;
-        else if (descLower.contains(token)) score += 1;
+        if (titleLower.contains(token)) { score += 8; }
+        else if (locationLower.contains(token)) { score += 4; }
+        else if (catLower.contains(token)) { score += 3; }
+        else if (descLower.contains(token)) { score += 1; }
       }
 
       // AI text: only title/location name matches (no category — avoids
       // "restaurant" in AI reply matching every restaurant in the list)
       for (final token in aiTokens) {
-        if (titleLower.contains(token)) score += 5;
-        else if (locationLower.contains(token)) score += 2;
+        if (titleLower.contains(token)) { score += 5; }
+        else if (locationLower.contains(token)) { score += 2; }
       }
 
       // Distance bonus
@@ -286,9 +324,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
           _position!.latitude, _position!.longitude,
           post.lat, post.lng,
         );
-        if (dist < 3000) score += 5;
-        else if (dist < 8000) score += 3;
-        else if (dist < 15000) score += 1;
+        if (dist < 3000) { score += 5; }
+        else if (dist < 8000) { score += 3; }
+        else if (dist < 15000) { score += 1; }
       }
 
       // Require a minimum content match — distance alone cannot qualify a post
@@ -428,6 +466,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
             child: Column(
               children: [
                 Expanded(child: listWidget),
+                if (_isAiChat && _sending)
+                  const _TypingBubble(label: 'AI is thinking', isAi: true)
+                else if (!_isAiChat)
+                  StreamBuilder<bool>(
+                    stream: _typingStream,
+                    builder: (_, s) => (s.data ?? false)
+                        ? _TypingBubble(
+                            label:
+                                '${_otherUsername ?? 'They'} is typing',
+                            isAi: false)
+                        : const SizedBox.shrink(),
+                  ),
                 if (_isAiChat && !limitReached && lastWasRecommendation)
                   _buildSuggestionChips(),
                 _buildInputBar(limitReached, todayAiMsgs),
@@ -470,7 +520,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               color: const Color(0xFFF3E8FF),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: const Color(0xFF8B5CF6).withOpacity(0.35)),
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
             ),
             child: Text(
               _quickReplies[i],
@@ -535,9 +585,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
                 decoration: BoxDecoration(
-                  color: kDestructive.withOpacity(0.08),
+                  color: kDestructive.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: kDestructive.withOpacity(0.25)),
+                  border: Border.all(color: kDestructive.withValues(alpha: 0.25)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -578,6 +628,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
                         ),
+                        onChanged: _onTextChanged,
                         onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
@@ -823,6 +874,89 @@ class _AiWelcomeBanner extends StatelessWidget {
   }
 }
 
+/// Animated "… is typing" bubble shown at the bottom of the conversation.
+class _TypingBubble extends StatefulWidget {
+  final String label;
+  final bool isAi;
+  const _TypingBubble({required this.label, required this.isAi});
+
+  @override
+  State<_TypingBubble> createState() => _TypingBubbleState();
+}
+
+class _TypingBubbleState extends State<_TypingBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.isAi ? const Color(0xFF8B5CF6) : kOrange;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: widget.isAi
+                ? const Color(0xFFF3E8FF)
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+              bottomLeft: Radius.circular(4),
+              bottomRight: Radius.circular(16),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(widget.label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: accent,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(width: 6),
+              AnimatedBuilder(
+                animation: _ctrl,
+                builder: (_, __) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(3, (i) {
+                      final t = (_ctrl.value * 3 - i).clamp(0.0, 1.0);
+                      final opacity = 0.3 + 0.7 * (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                        child: Opacity(
+                          opacity: opacity,
+                          child: Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                                color: accent, shape: BoxShape.circle),
+                          ),
+                        ),
+                      );
+                    }),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMe;
@@ -941,23 +1075,18 @@ class _MessageBubble extends StatelessWidget {
                           ),
                         ),
                 ),
-                // F32 — Read receipt ticks (only on my sent messages)
-                if (isMe) ...[
+                // F32 — Read receipt ticks (only on my sent messages):
+                // single grey check = sent, double blue check = read.
+                if (isMe && !isAi) ...[
                   const SizedBox(height: 2),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.done,
-                        size: 12,
+                        isRead ? Icons.done_all : Icons.done,
+                        size: 13,
                         color: isRead ? Colors.blue : kMutedFg,
                       ),
-                      if (isRead)
-                        const Icon(
-                          Icons.done,
-                          size: 12,
-                          color: Colors.blue,
-                        ),
                     ],
                   ),
                 ],

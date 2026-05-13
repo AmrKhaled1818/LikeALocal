@@ -27,6 +27,12 @@ class PostModel {
   final Timestamp createdAt;
   final bool isSponsoredContent;
   final String aiSummary;
+  // Live crowd / best-time indicator
+  final Map<int, int> checkinsByHour; // hour-of-day → check-in count
+  final Timestamp? lastCheckinAt;
+  final String bestTime; // AI-inferred "best time to visit" hint (cached)
+  final String videoUrl; // Cloudinary URL of an attached video (empty = none)
+  final String videoPublicId;
 
   PostModel({
     required this.postId,
@@ -53,7 +59,13 @@ class PostModel {
     Timestamp? createdAt,
     this.isSponsoredContent = false,
     this.aiSummary = '',
-  }) : createdAt = createdAt ?? Timestamp.now();
+    Map<int, int>? checkinsByHour,
+    this.lastCheckinAt,
+    this.bestTime = '',
+    this.videoUrl = '',
+    this.videoPublicId = '',
+  })  : createdAt = createdAt ?? Timestamp.now(),
+        checkinsByHour = checkinsByHour ?? const {};
 
   /// All image URLs for this post. Falls back to legacy single imageUrl field.
   List<String> get allImageUrls {
@@ -73,6 +85,16 @@ class PostModel {
       urls.add(legacyUrl);
       if (legacyPublicId.isNotEmpty) publicIds.add(legacyPublicId);
     }
+
+    final rawCheckins = (map['checkinsByHour'] as Map?) ?? const {};
+    final checkinsByHour = <int, int>{};
+    rawCheckins.forEach((k, v) {
+      final hour = int.tryParse(k.toString());
+      final count = (v is num) ? v.toInt() : int.tryParse('$v');
+      if (hour != null && hour >= 0 && hour <= 23 && count != null) {
+        checkinsByHour[hour] = count;
+      }
+    });
 
     return PostModel(
       postId: id,
@@ -99,6 +121,11 @@ class PostModel {
       createdAt: map['createdAt'] ?? Timestamp.now(),
       isSponsoredContent: map['isSponsoredContent'] ?? false,
       aiSummary: map['aiSummary'] ?? '',
+      checkinsByHour: checkinsByHour,
+      lastCheckinAt: map['lastCheckinAt'] as Timestamp?,
+      bestTime: map['bestTime'] ?? '',
+      videoUrl: map['videoUrl'] ?? '',
+      videoPublicId: map['videoPublicId'] ?? '',
     );
   }
 
@@ -129,6 +156,12 @@ class PostModel {
       'createdAt': createdAt,
       'isSponsoredContent': isSponsoredContent,
       'aiSummary': aiSummary,
+      'checkinsByHour':
+          checkinsByHour.map((k, v) => MapEntry(k.toString(), v)),
+      'lastCheckinAt': lastCheckinAt,
+      'bestTime': bestTime,
+      'videoUrl': videoUrl,
+      'videoPublicId': videoPublicId,
     };
   }
 
@@ -156,6 +189,11 @@ class PostModel {
     int? commentCount,
     bool? isSponsoredContent,
     String? aiSummary,
+    Map<int, int>? checkinsByHour,
+    Timestamp? lastCheckinAt,
+    String? bestTime,
+    String? videoUrl,
+    String? videoPublicId,
   }) {
     return PostModel(
       postId: postId ?? this.postId,
@@ -182,6 +220,11 @@ class PostModel {
       createdAt: createdAt,
       isSponsoredContent: isSponsoredContent ?? this.isSponsoredContent,
       aiSummary: aiSummary ?? this.aiSummary,
+      checkinsByHour: checkinsByHour ?? this.checkinsByHour,
+      lastCheckinAt: lastCheckinAt ?? this.lastCheckinAt,
+      bestTime: bestTime ?? this.bestTime,
+      videoUrl: videoUrl ?? this.videoUrl,
+      videoPublicId: videoPublicId ?? this.videoPublicId,
     );
   }
 }

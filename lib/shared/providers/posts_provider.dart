@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/post_model.dart';
 import '../../data/models/comment_model.dart';
 import '../../data/repositories/posts_repo.dart';
-import '../../data/seed_places.dart';
+import '../../core/utils/vibe_score.dart';
+import '../../core/services/proximity_service.dart';
 
 class PostsProvider extends ChangeNotifier {
   final PostsRepo _repo = PostsRepo();
@@ -21,6 +24,19 @@ class PostsProvider extends ChangeNotifier {
   Set<String> _savedPostIds = {};
   bool _savedIdsLoaded = false;
 
+  // Ordering option
+  bool _showSuperUsersFirst = true;
+  bool get showSuperUsersFirst => _showSuperUsersFirst;
+
+  void toggleSuperUsersFirst() {
+    _showSuperUsersFirst = !_showSuperUsersFirst;
+    notifyListeners();
+  }
+
+  // Mood-based home screen — persisted per device.
+  static const _moodPrefsKey = 'home_mood';
+  String _mood = '';
+
   static const _pageSize = 10;
 
   List<PostModel> get feedPosts => _feedPosts;
@@ -30,9 +46,69 @@ class PostsProvider extends ChangeNotifier {
   String? get error => _error;
   bool get savedIdsLoaded => _savedIdsLoaded;
   int get savedPostCount => _savedPostIds.length;
+  String get mood => _mood;
 
   PostsProvider() {
+    _loadMood();
     _loadFirstPage();
+  }
+
+  Future<void> _loadMood() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final m = prefs.getString(_moodPrefsKey) ?? '';
+      if (m.isNotEmpty && m != _mood) {
+        _mood = m;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setMood(String mood) async {
+    if (mood == _mood) return;
+    _mood = mood;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mood.isEmpty) {
+        await prefs.remove(_moodPrefsKey);
+      } else {
+        await prefs.setString(_moodPrefsKey, mood);
+      }
+    } catch (_) {}
+  }
+
+  /// Feed ordered for display: Super User posts always first, then by vibe-match
+  /// against [prefs] + the active [mood], then by recency. Does not mutate the
+  /// underlying paginated list.
+  List<PostModel> rankedFeed([Map<String, dynamic>? prefs]) {
+    final ranked = List<PostModel>.from(_feedPosts);
+    
+    int boost(PostModel p) {
+      var s = 0;
+      
+      // 1. If a mood is selected, heavily prioritize posts that match its categories
+      if (_mood.isNotEmpty) {
+        final moodCats = kMoodCategories[_mood] ?? const [];
+        final matchesCat = moodCats.any((c) => c.toLowerCase() == p.category.toLowerCase());
+        if (matchesCat) s += 1000000; // 1 Million points!
+      }
+      
+      // 2. Super User Boost
+      if (_showSuperUsersFirst && p.isSuperUser) s += 100000;
+      
+      // 3. General Vibe Score
+      s += VibeScore.forPost(p, prefs, mood: _mood) * 10;
+      return s;
+    }
+
+    ranked.sort((a, b) {
+      final cmp = boost(b).compareTo(boost(a));
+      if (cmp != 0) return cmp;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+
+    return ranked;
   }
 
   Future<void> _loadFirstPage() async {
@@ -42,19 +118,10 @@ class PostsProvider extends ChangeNotifier {
     _lastDoc = null;
     notifyListeners();
     try {
-      SeedPlaces.seedToFirestore().catchError((_) => 0);
-
       final (posts, lastDoc) = await _repo.getFeedPage(limit: _pageSize);
       _feedPosts = posts;
       _lastDoc = lastDoc;
       _hasMore = posts.length == _pageSize;
-
-      final existingIds = _feedPosts.map((p) => p.postId).toSet();
-      for (final seed in SeedPlaces.all) {
-        if (!existingIds.contains(seed.postId)) {
-          _feedPosts.add(seed);
-        }
-      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -81,9 +148,14 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<String?> createPost(PostModel post, List<File> imageFiles) async {
+  Future<String?> createPost(
+    PostModel post,
+    List<XFile> imageFiles, {
+    XFile? videoFile,
+  }) async {
     try {
-      final newPost = await _repo.createPost(post, imageFiles);
+      final newPost =
+          await _repo.createPost(post, imageFiles, videoFile: videoFile);
       _feedPosts = [newPost, ..._feedPosts];
       notifyListeners();
       return newPost.postId;
@@ -94,7 +166,7 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updatePost(PostModel updatedPost, List<File> newImageFiles) async {
+  Future<bool> updatePost(PostModel updatedPost, List<XFile> newImageFiles) async {
     try {
       final result = await _repo.updatePost(updatedPost, newImageFiles);
       final index = _feedPosts.indexWhere((p) => p.postId == updatedPost.postId);
@@ -240,6 +312,39 @@ class PostsProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> checkInPost(String postId, String userId) async {
+    final idx = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (idx != -1) {
+      final post = _feedPosts[idx];
+      final updated = Map<int, int>.from(post.checkinsByHour);
+      final h = DateTime.now().hour;
+      updated[h] = (updated[h] ?? 0) + 1;
+      _feedPosts = List<PostModel>.from(_feedPosts);
+      _feedPosts[idx] = post.copyWith(
+        checkinsByHour: updated,
+        lastCheckinAt: Timestamp.now(),
+      );
+      notifyListeners();
+    }
+    try {
+      await _repo.checkIn(postId, userId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    }
+  }
+
+  Future<void> cacheBestTime(String postId, String hint) async {
+    final idx = _feedPosts.indexWhere((p) => p.postId == postId);
+    if (idx != -1) {
+      _feedPosts = List<PostModel>.from(_feedPosts);
+      _feedPosts[idx] = _feedPosts[idx].copyWith(bestTime: hint);
+      notifyListeners();
+    }
+    await _repo.updateBestTime(postId, hint);
+  }
+
   Future<void> addComment(CommentModel comment) async {
     try {
       await _repo.addComment(comment);
@@ -275,11 +380,25 @@ class PostsProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await _repo.savePost(userId, postId);
+      _updateProximityCache();
     } catch (e) {
       _savedPostIds.remove(postId);
       notifyListeners();
       _error = e.toString();
     }
+  }
+
+  void _updateProximityCache() {
+    final saved = _feedPosts
+        .where((p) => _savedPostIds.contains(p.postId))
+        .map((p) => {
+              'postId': p.postId,
+              'title': p.title,
+              'lat': p.lat,
+              'lng': p.lng,
+            })
+        .toList();
+    ProximityService.cacheSavedPosts(saved);
   }
 
   Future<void> unsavePost(String userId, String postId) async {

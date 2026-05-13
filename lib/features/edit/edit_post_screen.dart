@@ -1,6 +1,7 @@
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,7 +36,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
   late List<String> _keptImageUrls;
   late List<String> _keptImagePublicIds;
   // new local files to upload on save
-  final List<File> _newImages = [];
+  final List<XFile> _newImages = [];
   static const int _maxImages = 5;
 
   late String _selectedCategory;
@@ -44,7 +45,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
   bool _saving = false;
 
   static const _categories = [
-    'Restaurant', 'Bar', 'Café', 'Park', 'Viewpoint', 'Shop',
+    'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Hotel', 'Museum', 'Mall',
   ];
 
   @override
@@ -362,7 +363,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          Text('${_totalImages}/$_maxImages photos',
+          Text('$_totalImages/$_maxImages photos',
               style: const TextStyle(color: kMutedFg, fontSize: 12)),
         ] else
           GestureDetector(
@@ -373,7 +374,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
               decoration: BoxDecoration(
                 color: kMuted,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+                border: Border.all(color: kMutedFg.withValues(alpha: 0.3), width: 1.5),
               ),
               child: const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -442,7 +443,9 @@ class _EditPostScreenState extends State<EditPostScreen> {
           margin: const EdgeInsets.only(right: 8),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.file(_newImages[index], fit: BoxFit.cover),
+            child: kIsWeb
+                ? Image.network(_newImages[index].path, fit: BoxFit.cover)
+                : Image.file(File(_newImages[index].path), fit: BoxFit.cover),
           ),
         ),
         Positioned(
@@ -469,7 +472,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
         decoration: BoxDecoration(
           color: kMuted,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: kMutedFg.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: kMutedFg.withValues(alpha: 0.3), width: 1.5),
         ),
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -492,11 +495,10 @@ class _EditPostScreenState extends State<EditPostScreen> {
       );
       if (picked.isEmpty) return;
       final toAdd = picked.take(remaining).toList();
-      final files = <File>[];
+      final files = <XFile>[];
       for (final x in toAdd) {
-        final file = File(x.path);
-        if (await file.length() > 4 * 1024 * 1024) continue;
-        files.add(file);
+        if (await x.length() > 4 * 1024 * 1024) continue;
+        files.add(x);
       }
       if (files.isNotEmpty) setState(() => _newImages.addAll(files));
     } catch (e) {

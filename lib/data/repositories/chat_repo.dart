@@ -104,6 +104,37 @@ class ChatRepo {
     await batch.commit();
   }
 
+  // ── Typing indicators ──────────────────────────────────────────────────────
+  // Stored on the chat doc as `typing.{uid}` → server-ish Timestamp (or removed).
+  static const _typingStaleSeconds = 6;
+
+  Future<void> setTyping(String chatId, String userId, bool typing) async {
+    // AI chats: the AI never types, so skip the write entirely.
+    if (chatId.startsWith('ai_')) return;
+    await _db.collection('chats').doc(chatId).update({
+      'typing.$userId': typing ? Timestamp.now() : FieldValue.delete(),
+    });
+  }
+
+  /// Emits true while *another* participant has a fresh typing timestamp.
+  Stream<bool> watchTyping(String chatId, String myUid) {
+    if (chatId.startsWith('ai_')) return Stream.value(false);
+    return _db.collection('chats').doc(chatId).snapshots().map((doc) {
+      if (!doc.exists) return false;
+      final typing = (doc.data()?['typing'] as Map?) ?? const {};
+      final now = DateTime.now();
+      for (final entry in typing.entries) {
+        if (entry.key == myUid) continue;
+        final ts = entry.value;
+        if (ts is Timestamp &&
+            now.difference(ts.toDate()).inSeconds < _typingStaleSeconds) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
   Future<void> markRead(String chatId, String userId) async {
     // Reset unread counter
     await _db

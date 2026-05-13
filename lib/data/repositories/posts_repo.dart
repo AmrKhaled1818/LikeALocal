@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
@@ -58,7 +59,7 @@ class PostsRepo {
     });
   }
 
-  Future<PostModel> updatePost(PostModel post, List<File> newImageFiles) async {
+  Future<PostModel> updatePost(PostModel post, List<XFile> newImageFiles) async {
     List<String> imageUrls = List<String>.from(post.imageUrls);
     List<String> imagePublicIds = List<String>.from(post.imagePublicIds);
 
@@ -106,7 +107,11 @@ class PostsRepo {
     return posts;
   }
 
-  Future<PostModel> createPost(PostModel post, List<File> imageFiles) async {
+  Future<PostModel> createPost(
+    PostModel post,
+    List<XFile> imageFiles, {
+    XFile? videoFile,
+  }) async {
     final ref = _db.collection('posts').doc();
     List<String> imageUrls = [];
     List<String> imagePublicIds = [];
@@ -117,12 +122,22 @@ class PostsRepo {
       imagePublicIds = results.map((r) => r.imagePublicId).toList();
     }
 
+    String videoUrl = '';
+    String videoPublicId = '';
+    if (videoFile != null) {
+      final result = await _cloudinary.uploadVideo(videoFile);
+      videoUrl = result.imageUrl;
+      videoPublicId = result.imagePublicId;
+    }
+
     final newPost = post.copyWith(
       postId: ref.id,
       imageUrl: imageUrls.isNotEmpty ? imageUrls.first : '',
       imagePublicId: imagePublicIds.isNotEmpty ? imagePublicIds.first : '',
       imageUrls: imageUrls,
       imagePublicIds: imagePublicIds,
+      videoUrl: videoUrl,
+      videoPublicId: videoPublicId,
     );
     await ref.set(newPost.toMap());
     await _userRepo.addKarma(post.userId, 10);
@@ -186,6 +201,26 @@ class PostsRepo {
           .doc(postId)
           .update({'aiSummary': summary});
     } catch (_) {}
+  }
+
+  Future<void> updateBestTime(String postId, String hint) async {
+    try {
+      await _db
+          .collection('posts')
+          .doc(postId)
+          .update({'bestTime': hint});
+    } catch (_) {}
+  }
+
+  /// Records a "check in" at this place at the current hour. Drives the live
+  /// crowd / best-time indicator. Awards the user a little karma.
+  Future<void> checkIn(String postId, String userId) async {
+    final now = DateTime.now();
+    await _db.collection('posts').doc(postId).update({
+      'checkinsByHour.${now.hour}': FieldValue.increment(1),
+      'lastCheckinAt': Timestamp.fromDate(now),
+    });
+    await _userRepo.addKarma(userId, 1);
   }
 
   Future<void> removeUpvote(String postId, String voterName) async {

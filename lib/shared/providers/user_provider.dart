@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/posts_repo.dart';
 import '../../data/repositories/user_repo.dart';
@@ -39,7 +40,7 @@ class UserProvider extends ChangeNotifier {
     if (data.isNotEmpty) await _repo.updateUser(uid, data);
   }
 
-  Future<void> updateAvatar(String uid, File imageFile) async {
+  Future<void> updateAvatar(String uid, XFile imageFile) async {
     final cloudinary = CloudinaryService();
     final result = await cloudinary.uploadAvatar(imageFile);
     await _repo.updateUser(uid, {'avatarUrl': result.imageUrl});

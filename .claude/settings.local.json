@@ -82,7 +82,20 @@
       "Bash(/mnt/c/flutter/bin/dart.bat analyze *)",
       "Read(//usr/local/bin/**)",
       "Read(//home/reverz/flutter/bin/**)",
-      "Read(//home/**)"
+      "Read(//home/**)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(flutter --version)",
+      "Read(//opt/flutter/bin/**)",
+      "Read(//usr/lib/flutter/bin/**)",
+      "Bash(command -v flutter.bat)",
+      "Read(//mnt/c/flutter/bin/**)",
+      "Bash(command -v jq)",
+      "Bash(command -v bc)",
+      "Bash(command -v awk)",
+      "Bash(command -v curl)",
+      "Bash(command -v python3)",
+      "Bash(python3 *)",
+      "Bash(curl *)"
     ]
   }
 }

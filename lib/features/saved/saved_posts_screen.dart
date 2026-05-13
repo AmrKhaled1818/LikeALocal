@@ -29,10 +29,12 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     final auth = context.read<AuthProvider>();
     final posts =
         await context.read<PostsProvider>().getSavedPosts(auth.uid);
-    if (mounted) setState(() {
-      _saved = posts;
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _saved = posts;
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -67,10 +69,10 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        color: kAmber.withOpacity(0.1),
+                        color: kAmber.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                         border:
-                            Border.all(color: kAmber.withOpacity(0.3)),
+                            Border.all(color: kAmber.withValues(alpha: 0.3)),
                       ),
                       child: const Row(
                         children: [
@@ -98,7 +100,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
                         children: [
                           Icon(Icons.bookmark_border,
                               size: 64,
-                              color: kMutedFg.withOpacity(0.4)),
+                              color: kMutedFg.withValues(alpha: 0.4)),
                           const SizedBox(height: 16),
                           const Text('No saved posts',
                               style: TextStyle(
@@ -175,7 +177,7 @@ class _SavedPostTile extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: kOrange.withOpacity(0.1),
+                            color: kOrange.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(

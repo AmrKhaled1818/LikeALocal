@@ -142,6 +142,12 @@ class SidebarMenu extends StatelessWidget {
                 ),
                 _menuItem(
                   context,
+                  icon: Icons.route_outlined,
+                  label: 'Trip Planner',
+                  route: '/trip',
+                ),
+                _menuItem(
+                  context,
                   icon: Icons.help_outline,
                   label: 'Help & FAQ',
                   route: '/faq',

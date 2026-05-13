@@ -8,7 +8,7 @@ class ChatProvider extends ChangeNotifier {
   final ChatRepo _repo = ChatRepo();
 
   List<ChatModel> _chats = [];
-  bool _isLoading = false;
+  final bool _isLoading = false;
   String? _listeningUid;
   StreamSubscription? _chatsSub;
   Map<String, int> _prevUnread = {};
@@ -109,6 +109,15 @@ class ChatProvider extends ChangeNotifier {
       await _repo.markRead(chatId, userId);
     } catch (_) {}
   }
+
+  Future<void> setTyping(String chatId, String userId, bool typing) async {
+    try {
+      await _repo.setTyping(chatId, userId, typing);
+    } catch (_) {}
+  }
+
+  Stream<bool> watchTyping(String chatId, String myUid) =>
+      _repo.watchTyping(chatId, myUid);
 
   int getUnreadCount(String userId) {
     int total = 0;

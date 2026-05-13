@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -69,7 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final auth = context.read<AuthProvider>();
       final userProvider = context.read<UserProvider>();
       AppToast.info('Uploading photo...');
-      await userProvider.updateAvatar(auth.uid, File(picked.path));
+      await userProvider.updateAvatar(auth.uid, picked);
       AppToast.success('Profile photo updated!');
     } catch (e) {
       AppToast.error('Failed to upload photo: ${e.toString().replaceFirst("Exception: ", "")}');
@@ -270,7 +270,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: kAmber.withOpacity(0.15),
+                          color: kAmber.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Row(
@@ -293,7 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: progress,
-                    backgroundColor: kMutedFg.withOpacity(0.2),
+                    backgroundColor: kMutedFg.withValues(alpha: 0.2),
                     valueColor:
                         const AlwaysStoppedAnimation<Color>(kAmber),
                     minHeight: 8,
@@ -338,7 +338,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.post_add_outlined,
-                size: 56, color: kMutedFg.withOpacity(0.4)),
+                size: 56, color: kMutedFg.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
             const Text('No posts yet',
                 style: TextStyle(
@@ -386,10 +386,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [kAmber.withOpacity(0.1), kOrange.withOpacity(0.1)],
+                  colors: [kAmber.withValues(alpha: 0.1), kOrange.withValues(alpha: 0.1)],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kAmber.withOpacity(0.3)),
+                border: Border.all(color: kAmber.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -421,7 +421,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.bookmark_border,
-                      size: 56, color: kMutedFg.withOpacity(0.4)),
+                      size: 56, color: kMutedFg.withValues(alpha: 0.4)),
                   const SizedBox(height: 12),
                   const Text('No saved posts',
                       style: TextStyle(
@@ -469,6 +469,17 @@ class _ProfileScreenState extends State<ProfileScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Center(
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _editAvatar();
+                  },
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: const Text('Change Profile Photo'),
+                ),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: usernameCtrl,
                 decoration:

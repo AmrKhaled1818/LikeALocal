@@ -62,3 +62,15 @@ CLAUDE.md
 firebase.cmd
 flutterfire.cmd
 
+# Temporary / generated files
+render.html
+*.html.bak
+
+# APK / release artefacts (keep out of source tree)
+*.apk
+*.aab
+*.ipa
+
+# OS artefacts
+Thumbs.db
+

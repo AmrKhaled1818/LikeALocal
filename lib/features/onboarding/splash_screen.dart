@@ -42,11 +42,15 @@ class _SplashScreenState extends State<SplashScreen>
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('onboarding_seen') ?? false;
     if (!mounted) return;
-    if (!seen) {
-      context.go('/onboarding');
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn) {
+      context.go('/login');
     } else {
-      final auth = context.read<AuthProvider>();
-      context.go(auth.isLoggedIn ? '/feed' : '/login');
+      if (!seen) {
+        context.go('/onboarding');
+      } else {
+        context.go('/feed');
+      }
     }
   }
 
