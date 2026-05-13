@@ -57,17 +57,6 @@ class SeedPlaces {
         category: 'Mall',
       ),
       _createSeedPost(
-        postId: 'seed_gem_museum',
-        title: 'Grand Egyptian Museum (GEM)',
-        description: 'The world\'s largest archaeological museum dedicated to a single civilization, housing the full Tutankhamun collection.',
-        localTips: 'Book tickets online in advance. The view of the Pyramids from the windows is unmatched.',
-        imageUrl: 'https://images.unsplash.com/photo-1539768942893-daf53e448371?auto=format&fit=crop&w=1400&q=80',
-        location: 'Giza (near 6th of October City)',
-        lat: 29.9944,
-        lng: 31.1195,
-        category: 'Museum',
-      ),
-      _createSeedPost(
         postId: 'seed_kazoku',
         title: 'Kazoku',
         description: 'An upscale contemporary Japanese restaurant known for its minimalist design and high-quality sushi and wagyu beef.',

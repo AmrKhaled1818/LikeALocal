@@ -137,7 +137,7 @@ class _PostsScreenState extends State<PostsScreen>
                                   HapticFeedback.lightImpact();
                                   posts.toggleSuperUsersFirst();
                                 },
-                                activeColor: kOrange,
+                                activeThumbColor: kOrange,
                                 activeTrackColor: kOrange.withValues(alpha: 0.3),
                                 inactiveThumbColor: kMutedFg,
                                 inactiveTrackColor: Colors.black26,

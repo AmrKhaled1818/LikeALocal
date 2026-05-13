@@ -35,7 +35,7 @@ class _SearchScreenState extends State<SearchScreen>
   String _selectedCategory = 'All';
 
   static const _categories = [
-    'All', 'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Hotel', 'Museum', 'Mall'
+    'All', 'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Mall'
   ];
 
   @override

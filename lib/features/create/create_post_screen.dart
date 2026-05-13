@@ -55,8 +55,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     'Park',
     'Viewpoint',
     'Shop',
-    'Hotel',
-    'Museum',
     'Mall',
   ];
 

@@ -237,8 +237,6 @@ class _AppRouterState extends State<_AppRouter> {
             title.contains('gateway') ||
             desc.contains('shopping mall')) {
           newCat = 'Mall';
-        } else if (title.contains('museum') || title.contains('gem')) {
-          newCat = 'Museum';
         } else if (title.contains('gallery') || 
                    title.contains('art') || 
                    title.contains('cultural') || 

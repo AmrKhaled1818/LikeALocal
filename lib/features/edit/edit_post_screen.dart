@@ -45,7 +45,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
   bool _saving = false;
 
   static const _categories = [
-    'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Hotel', 'Museum', 'Mall',
+    'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Mall',
   ];
 
   @override

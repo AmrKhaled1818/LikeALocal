@@ -7,7 +7,7 @@ const _moodIcons = <String, IconData>{
   'chill': Icons.spa_outlined,
   'adventurous': Icons.hiking_outlined,
   'hungry': Icons.restaurant_outlined,
-  'cultural': Icons.museum_outlined,
+  'cultural': Icons.palette_outlined,
 };
 
 /// Horizontal row of mood chips. [selected] is '' for "Any vibe".

@@ -171,7 +171,7 @@ class _MoodPickSlide extends StatelessWidget {
         'Out exploring — rooftops, trails, nightlife', Color(0xFFE8580A)),
     ('hungry', Icons.restaurant_outlined,
         'On the hunt for food — restaurants & eats', Color(0xFFD4820A)),
-    ('cultural', Icons.museum_outlined,
+    ('cultural', Icons.palette_outlined,
         'Soaking up the city — history, art, heritage', Color(0xFF7C3AED)),
   ];
 
