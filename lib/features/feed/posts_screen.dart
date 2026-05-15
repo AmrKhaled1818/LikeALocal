@@ -7,7 +7,6 @@ import 'package:shimmer/shimmer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/vibe_score.dart';
 import '../../data/models/post_model.dart';
-import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import '../../core/utils/responsive.dart';
 import '../../shared/widgets/error_retry.dart';
@@ -75,15 +74,8 @@ class _PostsScreenState extends State<PostsScreen>
       selector: (_, p) => (p.feedPosts, p.isLoadingMore, p.hasMore, p.mood, p.showSuperUsersFirst),
       builder: (context, data, _) {
         final (_, isLoadingMore, hasMore, mood, _) = data;
-        // Rebuild (→ re-rank) whenever the user's saved style changes.
-        context.select<AuthProvider, String>((a) {
-          final pr = a.userModel?.preferences ?? const {};
-          return '${pr['budget']}|${pr['atmosphere']}|'
-              '${(pr['favCategories'] as List?)?.join(',') ?? ''}';
-        });
         final posts = context.read<PostsProvider>();
-        final prefs = context.read<AuthProvider>().userModel?.preferences;
-        final feedPosts = posts.rankedFeed(prefs);
+        final feedPosts = posts.rankedFeed();
         return RefreshIndicator(
           color: kOrange,
           onRefresh: () async {
@@ -119,8 +111,7 @@ class _PostsScreenState extends State<PostsScreen>
                             'Hidden Gems Feed',
                             style: TextStyle(
                                 fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white),
+                                fontWeight: FontWeight.w800),
                           ),
                           Row(
                             children: [

@@ -365,14 +365,13 @@ class _PostCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () => context.push('/post/${post.postId}'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: kDark,
+                  foregroundColor: kOrange,
                   side: const BorderSide(color: kOrange),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
                 ),
-                icon: const Icon(Icons.info_outline,
-                    size: 14, color: kOrange),
+                icon: const Icon(Icons.info_outline, size: 14),
                 label: const Text('View Full Post',
                     style: TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w500)),

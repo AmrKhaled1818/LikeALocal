@@ -1,6 +1,4 @@
 import 'dart:ui';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -98,7 +96,6 @@ class _AppRouterState extends State<_AppRouter> {
   void initState() {
     super.initState();
     final authProvider = context.read<AuthProvider>();
-    _runMigration(); // Run one-time cleanup
     _router = GoRouter(
       initialLocation: '/splash',
       refreshListenable: authProvider,
@@ -203,74 +200,6 @@ class _AppRouterState extends State<_AppRouter> {
         body: Center(child: Text('Page not found: ${state.error}')),
       ),
     );
-  }
-
-  Future<void> _runMigration() async {
-    try {
-      final db = FirebaseFirestore.instance;
-      final posts = await db.collection('posts').get();
-      
-      // Export all posts to JSON
-      final List<Map<String, dynamic>> allPostsData = [];
-      
-      for (final doc in posts.docs) {
-        final data = doc.data();
-        allPostsData.add({
-          'id': doc.id,
-          ...data,
-          // Convert Timestamps to strings for JSON
-          'createdAt': data['createdAt'] is Timestamp 
-              ? (data['createdAt'] as Timestamp).toDate().toIso8601String()
-              : data['createdAt'],
-        });
-
-        final title = (data['title'] ?? '').toString().toLowerCase();
-        final desc = (data['description'] ?? '').toString().toLowerCase();
-        final currentCat = data['category']?.toString() ?? '';
-
-        String? newCat;
-        
-        if (title.contains('mall') || 
-            title.contains('plaza') || 
-            title.contains('center') || 
-            title.contains('hub') ||
-            title.contains('gateway') ||
-            desc.contains('shopping mall')) {
-          newCat = 'Mall';
-        } else if (title.contains('gallery') || 
-                   title.contains('art') || 
-                   title.contains('cultural') || 
-                   title.contains('bibliothek')) {
-          newCat = 'Cultural';
-        } else if (currentCat == 'Bar' || 
-                   title.contains(' pub') || 
-                   title.contains('lounge') || 
-                   title.contains('bar ')) {
-          newCat = 'Restaurant';
-        } else if (currentCat == 'Historic') {
-          newCat = 'Cultural';
-        } else if (currentCat == 'Shop' && (title.contains('mall') || title.contains('plaza'))) {
-          newCat = 'Mall';
-        }
-
-        if (newCat != null && currentCat != newCat) {
-          await doc.reference.update({'category': newCat});
-          debugPrint('[Migration] Updated ${doc.id} ("${data['title']}") to category $newCat');
-        }
-      }
-
-      // Save to file (Only works on Desktop/Mobile, not Web, but since user is on Windows it should work)
-      if (!kIsWeb) {
-        final jsonString = jsonEncode(allPostsData);
-        await File('posts_database_export.json').writeAsString(jsonString);
-        debugPrint('[Export] Full database exported to posts_database_export.json');
-      } else {
-        debugPrint('[Export] JSON Export: ${jsonEncode(allPostsData)}');
-      }
-
-    } catch (e) {
-      debugPrint('[Migration] Error: $e');
-    }
   }
 
   @override

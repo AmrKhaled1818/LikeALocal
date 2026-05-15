@@ -24,6 +24,8 @@ const _categoryColors = {
   'park': Color(0xFF059669),
   'viewpoint': Color(0xFF0284C7),
   'shop': Color(0xFFDB2777),
+  'mall': Color(0xFF0891B2),
+  'cultural': Color(0xFF7C3AED),
 };
 
 Color _catColor(String category) =>

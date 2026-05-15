@@ -17,7 +17,7 @@ const kMoodCategories = <String, List<String>>{
   'chill': ['Café', 'Park', 'Viewpoint'],
   'adventurous': ['Viewpoint', 'Park'],
   'hungry': ['Restaurant', 'Café'],
-  'cultural': ['Viewpoint', 'Shop', 'Mall'],
+  'cultural': ['Cultural'],
 };
 
 const _moodKeywords = <String, List<String>>{
@@ -29,7 +29,7 @@ const _moodKeywords = <String, List<String>>{
     'food', 'dish', 'eat', 'tasty', 'delicious', 'meal', 'cuisine', 'brunch', 'dinner'
   ],
   'cultural': [
-    'history', 'art', 'cultural', 'heritage', 'gallery', 'historic', 'traditional', 'mall', 'shopping'
+    'history', 'art', 'cultural', 'heritage', 'gallery', 'historic', 'traditional', 'museum', 'exhibit'
   ],
 };
 

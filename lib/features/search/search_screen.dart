@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -35,7 +36,7 @@ class _SearchScreenState extends State<SearchScreen>
   String _selectedCategory = 'All';
 
   static const _categories = [
-    'All', 'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Mall'
+    'All', 'Restaurant', 'Café', 'Mall', 'Park', 'Cultural', 'Viewpoint', 'Shop'
   ];
 
   @override
@@ -161,9 +162,7 @@ class _SearchScreenState extends State<SearchScreen>
                 _buildSearchHeader(),
                 if (_query.isNotEmpty) _buildTabs(),
                 Expanded(
-                  child: _query.isEmpty
-                      ? _buildDiscovery()
-                      : _buildResults(),
+                  child: _buildBodyContent(),
                 ),
               ],
             ),
@@ -184,117 +183,31 @@ class _SearchScreenState extends State<SearchScreen>
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
-          Consumer<PostsProvider>(builder: (_, postsP, __) {
-            final suggestions = _showSuggestions ? _getSuggestions(postsP.feedPosts) : <PostModel>[];
-            return Column(
-              children: [
-                TextField(
-                  controller: _searchCtrl,
-                  focusNode: _focusNode,
-                  onChanged: (v) => setState(() {
-                    _showSuggestions = v.isNotEmpty && _focusNode.hasFocus;
-                  }),
-                  onSubmitted: (v) {
-                    if (v.trim().isNotEmpty) _runSearch(v.trim());
-                  },
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search, color: kMutedFg, size: 20),
-                    hintText: 'Search posts, places, people, categories...',
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close, color: kMutedFg, size: 18),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              _runSearch('');
-                              setState(() => _showSuggestions = false);
-                            },
-                          )
-                        : null,
-                  ),
-                ),
-                if (suggestions.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: kMuted),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: suggestions.map((post) {
-                        return InkWell(
-                          onTap: () {
-                            _focusNode.unfocus();
-                            setState(() => _showSuggestions = false);
-                            context.push('/post/${post.postId}');
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.place, color: kOrange, size: 16),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        post.title,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        post.location,
-                                        style: const TextStyle(
-                                            color: kMutedFg, fontSize: 11),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: kOrange.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    post.category,
-                                    style: const TextStyle(
-                                        color: kOrange, fontSize: 10),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    ),
-                  ),
-                  ),
-                ],
-              ],
-            );
-          }),
+          TextField(
+            controller: _searchCtrl,
+            focusNode: _focusNode,
+            onChanged: (v) => setState(() {
+              _showSuggestions = v.isNotEmpty && _focusNode.hasFocus;
+            }),
+            onSubmitted: (v) {
+              if (v.trim().isNotEmpty) _runSearch(v.trim());
+            },
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, color: kMutedFg, size: 20),
+              hintText: 'Search posts, places, people, categories...',
+              suffixIcon: _searchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, color: kMutedFg, size: 18),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        _runSearch('');
+                        setState(() => _showSuggestions = false);
+                      },
+                    )
+                  : null,
+            ),
+          ),
           const SizedBox(height: 8),
           // Category chips
           SizedBox(
@@ -333,6 +246,79 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
+  /// Routes the Expanded content area: suggestions when typing, otherwise
+  /// results or discovery. Keeps suggestions out of the header Column so
+  /// the layout never overflows when the keyboard is open.
+  Widget _buildBodyContent() {
+    if (_showSuggestions && _searchCtrl.text.isNotEmpty) {
+      return Consumer<PostsProvider>(
+        builder: (_, postsP, __) {
+          final suggestions = _getSuggestions(postsP.allPosts);
+          if (suggestions.isEmpty) {
+            return _query.isEmpty ? _buildDiscovery() : _buildResults();
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: suggestions.length,
+            itemBuilder: (_, i) {
+              final post = suggestions[i];
+              return InkWell(
+                onTap: () {
+                  _focusNode.unfocus();
+                  setState(() => _showSuggestions = false);
+                  context.push('/post/${post.postId}');
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.place, color: kOrange, size: 16),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              post.title,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 13),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              post.location,
+                              style: const TextStyle(
+                                  color: kMutedFg, fontSize: 11),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: kOrange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(post.category,
+                            style: const TextStyle(
+                                color: kOrange, fontSize: 10)),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+    }
+    return _query.isEmpty ? _buildDiscovery() : _buildResults();
+  }
+
   Widget _buildTabs() {
     return TabBar(
       controller: _tabCtrl,
@@ -357,11 +343,32 @@ class _SearchScreenState extends State<SearchScreen>
   Widget _buildDiscovery() {
     return Consumer<PostsProvider>(
       builder: (context, postsProvider, _) {
-        final allPosts = _selectedCategory == 'All'
-            ? postsProvider.feedPosts
-            : postsProvider.feedPosts.where(_categoryMatches).toList();
+        final allPosts = postsProvider.allPosts;
 
-        // Trending = top 5 by upvotes (filtered by selected category)
+        // Category selected: show every matching post as a full list
+        if (_selectedCategory != 'All') {
+          if (allPosts.isEmpty) {
+            return const Center(child: CircularProgressIndicator(color: kOrange));
+          }
+          final filtered = allPosts.where(_categoryMatches).toList()
+            ..sort((a, b) => b.upvotes.compareTo(a.upvotes));
+          if (filtered.isEmpty) {
+            return Center(
+              child: Text('No $_selectedCategory spots yet',
+                  style: const TextStyle(color: kMutedFg)),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: filtered.length,
+            itemBuilder: (_, i) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: PostCard(post: filtered[i]),
+            ),
+          );
+        }
+
+        // All categories: show trending + recent + recommended
         final trending = List<PostModel>.from(allPosts)
           ..sort((a, b) => b.upvotes.compareTo(a.upvotes));
         final trendingList = trending.take(5).toList();
@@ -371,18 +378,12 @@ class _SearchScreenState extends State<SearchScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Trending',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              const Text('Trending',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               if (trendingList.isEmpty)
-                Text(
-                  _selectedCategory == 'All'
-                      ? 'No posts yet'
-                      : 'No trending $_selectedCategory spots yet',
-                  style: const TextStyle(color: kMutedFg, fontSize: 13),
-                )
+                const Text('No posts yet',
+                    style: TextStyle(color: kMutedFg, fontSize: 13))
               else
                 ...trendingList.asMap().entries.map((e) {
                   final p = e.value;
@@ -403,14 +404,12 @@ class _SearchScreenState extends State<SearchScreen>
                         shape: BoxShape.circle,
                       ),
                       child: Center(
-                        child: Text(
-                          '$rank',
-                          style: TextStyle(
-                            color: rank <= 3 ? kOrange : kMutedFg,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
+                        child: Text('$rank',
+                            style: TextStyle(
+                              color: rank <= 3 ? kOrange : kMutedFg,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            )),
                       ),
                     ),
                     title: Text(p.title,
@@ -418,15 +417,13 @@ class _SearchScreenState extends State<SearchScreen>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                     subtitle: Text(p.location,
-                        style:
-                            const TextStyle(color: kMutedFg, fontSize: 12),
+                        style: const TextStyle(color: kMutedFg, fontSize: 12),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.arrow_upward,
-                            color: kOrange, size: 14),
+                        const Icon(Icons.arrow_upward, color: kOrange, size: 14),
                         const SizedBox(width: 2),
                         Text('${p.upvotes}',
                             style: const TextStyle(
@@ -443,11 +440,9 @@ class _SearchScreenState extends State<SearchScreen>
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    const Text(
-                      'Recent',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Recent',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
                     const Spacer(),
                     GestureDetector(
                       onTap: _clearRecentSearches,
@@ -458,24 +453,19 @@ class _SearchScreenState extends State<SearchScreen>
                 ),
                 const SizedBox(height: 10),
                 ..._recentSearches.map((r) => ListTile(
-                      leading: const Icon(Icons.history,
-                          color: kMutedFg, size: 20),
-                      title: Text(r,
-                          style: const TextStyle(fontSize: 14)),
+                      leading:
+                          const Icon(Icons.history, color: kMutedFg, size: 20),
+                      title: Text(r, style: const TextStyle(fontSize: 14)),
                       trailing: GestureDetector(
                         onTap: () async {
-                          final prefs =
-                              await SharedPreferences.getInstance();
-                          final list = prefs.getStringList('search_recent') ??
-                              [];
+                          final prefs = await SharedPreferences.getInstance();
+                          final list =
+                              prefs.getStringList('search_recent') ?? [];
                           list.remove(r);
                           await prefs.setStringList('search_recent', list);
-                          if (mounted) {
-                            setState(() => _recentSearches = list);
-                          }
+                          if (mounted) setState(() => _recentSearches = list);
                         },
-                        child: const Icon(Icons.close,
-                            color: kMutedFg, size: 16),
+                        child: const Icon(Icons.close, color: kMutedFg, size: 16),
                       ),
                       onTap: () {
                         _searchCtrl.text = r;
@@ -487,15 +477,10 @@ class _SearchScreenState extends State<SearchScreen>
               ],
 
               const SizedBox(height: 20),
-              Text(
-                _selectedCategory == 'All'
-                    ? 'Recommended For You'
-                    : 'Top $_selectedCategory Spots',
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              const Text('Recommended For You',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              _RecommendedSection(category: _selectedCategory),
+              _RecommendedSection(allPosts: allPosts),
             ],
           ),
         );
@@ -504,16 +489,22 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Widget _buildResults() {
-    return TabBarView(
-      controller: _tabCtrl,
-      children: [
-        _PlaceResults(
-            query: _query,
-            matcher: _matchesPost,
-            selectedCategory: _selectedCategory),
-        _PostResults(query: _query, matcher: _matchesPost),
-        _PeopleResults(users: _userResults, searching: _searching),
-      ],
+    return Consumer<PostsProvider>(
+      builder: (_, postsProvider, __) {
+        final allPosts = postsProvider.allPosts;
+        return TabBarView(
+          controller: _tabCtrl,
+          children: [
+            _PlaceResults(
+                query: _query,
+                matcher: _matchesPost,
+                selectedCategory: _selectedCategory,
+                allPosts: allPosts),
+            _PostResults(query: _query, matcher: _matchesPost, allPosts: allPosts),
+            _PeopleResults(users: _userResults, searching: _searching),
+          ],
+        );
+      },
     );
   }
 }
@@ -524,18 +515,20 @@ class _PlaceResults extends StatelessWidget {
   final String query;
   final bool Function(PostModel, String) matcher;
   final String selectedCategory;
+  final List<PostModel> allPosts;
 
   const _PlaceResults({
     required this.query,
     required this.matcher,
     required this.selectedCategory,
+    required this.allPosts,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PostsProvider>(
-      builder: (context, posts, _) {
-        final matched = posts.feedPosts.where((p) => matcher(p, query)).toList();
+    return Builder(
+      builder: (context) {
+        final matched = allPosts.where((p) => matcher(p, query)).toList();
 
         if (matched.isEmpty) {
           return Center(
@@ -826,14 +819,13 @@ class _PlaceGroupCard extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: () => _openDetail(context),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: kDark,
+                        foregroundColor: kOrange,
                         side: const BorderSide(color: kOrange),
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
-                      icon: const Icon(Icons.reviews_outlined,
-                          size: 16, color: kOrange),
+                      icon: const Icon(Icons.reviews_outlined, size: 16),
                       label: Text(
                         hasMultiple ? 'All Reviews' : 'View Details',
                         style: const TextStyle(
@@ -855,38 +847,27 @@ class _PlaceGroupCard extends StatelessWidget {
 // ── Recommended section ──────────────────────────────────────────────────────
 
 class _RecommendedSection extends StatelessWidget {
-  final String category;
-  const _RecommendedSection({required this.category});
-
-  bool _matches(PostModel p) {
-    if (category == 'All') return true;
-    return p.category.toLowerCase() == category.toLowerCase() ||
-        (category == 'Café' && (p.category == 'Café' || p.category == 'Cafe'));
-  }
+  final List<PostModel> allPosts;
+  const _RecommendedSection({required this.allPosts});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PostsProvider>(
-      builder: (context, posts, _) {
-        final recommended =
-            posts.feedPosts.where(_matches).take(3).toList();
-        if (recommended.isEmpty) {
-          return Text(
-            category == 'All'
-                ? 'Explore posts to get recommendations'
-                : 'No $category spots found yet',
-            style: const TextStyle(color: kMutedFg, fontSize: 13),
-          );
-        }
-        return Column(
-          children: recommended
-              .map((p) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: PostCard(post: p),
-                  ))
-              .toList(),
-        );
-      },
+    final recommended = List<PostModel>.from(allPosts)
+      ..sort((a, b) => b.upvotes.compareTo(a.upvotes));
+    final top = recommended.take(3).toList();
+    if (top.isEmpty) {
+      return const Text(
+        'Explore posts to get recommendations',
+        style: TextStyle(color: kMutedFg, fontSize: 13),
+      );
+    }
+    return Column(
+      children: top
+          .map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: PostCard(post: p),
+              ))
+          .toList(),
     );
   }
 }
@@ -896,14 +877,14 @@ class _RecommendedSection extends StatelessWidget {
 class _PostResults extends StatelessWidget {
   final String query;
   final bool Function(PostModel, String) matcher;
-  const _PostResults({required this.query, required this.matcher});
+  final List<PostModel> allPosts;
+  const _PostResults({required this.query, required this.matcher, required this.allPosts});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PostsProvider>(
-      builder: (context, posts, _) {
-        final results =
-            posts.feedPosts.where((p) => matcher(p, query)).toList();
+    return Builder(
+      builder: (context) {
+        final results = allPosts.where((p) => matcher(p, query)).toList();
         if (results.isEmpty) {
           return Center(
             child: Column(

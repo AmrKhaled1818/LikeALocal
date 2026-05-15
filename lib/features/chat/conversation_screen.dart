@@ -64,6 +64,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
     'local', 'best', 'any', 'some', 'here', 'there', 'area', 'city',
   };
 
+  // Accent-fold + lowercase so "Café" matches "cafe", "résidence" matches "residence", etc.
+  static String _norm(String s) => s
+      .toLowerCase()
+      .replaceAll('é', 'e').replaceAll('è', 'e').replaceAll('ê', 'e').replaceAll('ë', 'e')
+      .replaceAll('à', 'a').replaceAll('â', 'a').replaceAll('ä', 'a')
+      .replaceAll('ô', 'o').replaceAll('ö', 'o')
+      .replaceAll('ü', 'u').replaceAll('û', 'u')
+      .replaceAll('ç', 'c').replaceAll('ñ', 'n')
+      .replaceAll("'", '').replaceAll('-', ' ');
+
   bool get _isAiChat => widget.chatId.startsWith('ai_');
   bool get _limitReached => _limitLoaded && _todayAiCount >= _dailyLimit;
 
@@ -246,7 +256,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       if (_isAiChat && auth.userModel != null) {
         // Use the already-loaded message list — no redundant Firestore fetch
         final messages = _currentMessages;
-        final allPosts = postsProvider.feedPosts;
+        final allPosts = postsProvider.allPosts;
         final availablePlaces = allPosts.map((p) => '${p.title} in ${p.location}').join(', ');
 
         final reply = await AIService().getAIResponse(
@@ -277,60 +287,71 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   List<PostModel> _findRelatedPosts(
       String aiText, String userQuery, List<PostModel> allPosts) {
-    // User query tokens — primary signal
-    final queryTokens = userQuery
-        .toLowerCase()
+    final queryNorm = _norm(userQuery);
+    final aiNorm = _norm(aiText);
+
+    final queryTokens = queryNorm
         .split(RegExp(r'\W+'))
         .where((w) => w.length > 2 && !_genericQueryWords.contains(w))
         .toSet();
 
-    // No meaningful query words → no related posts (avoids showing cards for greetings)
     if (queryTokens.isEmpty) return [];
 
-    // AI text tokens — secondary signal (long words only, no category words)
-    final aiTokens = aiText
-        .toLowerCase()
-        .split(RegExp(r'\W+'))
-        .where((w) => w.length > 4 && !_genericQueryWords.contains(w))
-        .toSet();
+    // Find which query tokens are location words by checking against post location fields.
+    // When the user names a location ("zamalek", "maadi"), only posts there qualify.
+    final knownLocationWords = <String>{};
+    for (final post in allPosts) {
+      _norm(post.location)
+          .split(RegExp(r'\W+'))
+          .where((w) => w.length > 2)
+          .forEach(knownLocationWords.add);
+    }
+    final queryLocationTokens = queryTokens.intersection(knownLocationWords);
 
     final scored = <PostModel, int>{};
 
     for (final post in allPosts) {
       int score = 0;
-      final titleLower = post.title.toLowerCase();
-      final locationLower = post.location.toLowerCase();
-      final descLower = post.description.toLowerCase();
-      final catLower = post.category.toLowerCase();
+      final titleNorm = _norm(post.title);
+      final locationNorm = _norm(post.location);
+      final descNorm = _norm(post.description);
+      final catNorm = _norm(post.category);
 
-      // User query: title hit = strongest, then location, category, description
+      // 1. AI explicitly named this place — highest signal.
+      //    Match any meaningful title word found in the AI response text.
+      for (final tw in titleNorm
+          .split(RegExp(r'\W+'))
+          .where((w) => w.length > 2 && !_genericQueryWords.contains(w))) {
+        if (aiNorm.contains(tw)) { score += 12; break; }
+      }
+
+      // 2. User query tokens — normalized so "cafe" matches "café" category.
       for (final token in queryTokens) {
-        if (titleLower.contains(token)) { score += 8; }
-        else if (locationLower.contains(token)) { score += 4; }
-        else if (catLower.contains(token)) { score += 3; }
-        else if (descLower.contains(token)) { score += 1; }
+        if (titleNorm.contains(token)) { score += 8; }
+        else if (locationNorm.contains(token)) { score += 5; }
+        else if (catNorm.contains(token)) { score += 4; }
+        else if (descNorm.contains(token)) { score += 1; }
       }
 
-      // AI text: only title/location name matches (no category — avoids
-      // "restaurant" in AI reply matching every restaurant in the list)
-      for (final token in aiTokens) {
-        if (titleLower.contains(token)) { score += 5; }
-        else if (locationLower.contains(token)) { score += 2; }
-      }
-
-      // Distance bonus
+      // 3. Distance bonus.
       if (_position != null && (post.lat != 0 || post.lng != 0)) {
         final dist = Geolocator.distanceBetween(
           _position!.latitude, _position!.longitude,
           post.lat, post.lng,
         );
         if (dist < 3000) { score += 5; }
-        else if (dist < 8000) { score += 3; }
-        else if (dist < 15000) { score += 1; }
+        else if (dist < 8000) { score += 2; }
       }
 
-      // Require a minimum content match — distance alone cannot qualify a post
-      if (score >= 10) scored[post] = score;
+      // 4. Location gate: if the user named a specific area, skip posts outside it.
+      if (queryLocationTokens.isNotEmpty) {
+        final inArea = queryLocationTokens.any(
+          (lw) => locationNorm.contains(lw) || titleNorm.contains(lw),
+        );
+        if (!inArea) continue;
+      }
+
+      if (score >= 6) scored[post] = score;
     }
 
     final sorted = scored.entries.toList()
@@ -341,7 +362,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final allPosts = context.watch<PostsProvider>().feedPosts;
+    final allPosts = context.watch<PostsProvider>().allPosts;
 
     return Scaffold(
       appBar: AppBar(
@@ -713,7 +734,7 @@ class _PostChip extends StatelessWidget {
         width: 180,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
               color: post.isSuperUser ? kAmber : kOrange, width: 1.2),

@@ -6,13 +6,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/post_model.dart';
 import '../../data/models/comment_model.dart';
 import '../../data/repositories/posts_repo.dart';
-import '../../core/utils/vibe_score.dart';
 import '../../core/services/proximity_service.dart';
 
 class PostsProvider extends ChangeNotifier {
   final PostsRepo _repo = PostsRepo();
 
   List<PostModel> _feedPosts = [];
+  // Full unfiltered list from a persistent stream — used by map & search
+  // so they always see ALL posts regardless of feed pagination.
+  List<PostModel> _allPosts = [];
+  StreamSubscription<List<PostModel>>? _allPostsSub;
+
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMore = true;
@@ -39,6 +43,9 @@ class PostsProvider extends ChangeNotifier {
   static const _pageSize = 10;
 
   List<PostModel> get feedPosts => _feedPosts;
+  /// All posts from the real-time stream — no pagination limit.
+  /// Falls back to the paginated list while the stream is loading.
+  List<PostModel> get allPosts => _allPosts.isEmpty ? _feedPosts : _allPosts;
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
@@ -50,6 +57,20 @@ class PostsProvider extends ChangeNotifier {
   PostsProvider() {
     _loadMood();
     _loadFirstPage();
+    _subscribeAllPosts();
+  }
+
+  void _subscribeAllPosts() {
+    _allPostsSub = _repo.getFeedPosts().listen((posts) {
+      _allPosts = posts;
+      notifyListeners();
+    }, onError: (_) {});
+  }
+
+  @override
+  void dispose() {
+    _allPostsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadMood() async {
@@ -77,33 +98,20 @@ class PostsProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Feed ordered for display: Super User posts always first, then by vibe-match
-  /// against [prefs] + the active [mood], then by recency. Does not mutate the
-  /// underlying paginated list.
+  /// Feed ordered for display.
+  /// Toggle OFF → pure newest-first (no scoring).
+  /// Toggle ON  → super user posts first (newest-first within group),
+  ///              then everyone else (newest-first). No vibe scoring in either mode.
   List<PostModel> rankedFeed([Map<String, dynamic>? prefs]) {
     final ranked = List<PostModel>.from(_feedPosts);
-    
-    int boost(PostModel p) {
-      var s = 0;
-      
-      // 1. If a mood is selected, heavily prioritize posts that match its categories
-      if (_mood.isNotEmpty) {
-        final moodCats = kMoodCategories[_mood] ?? const [];
-        final matchesCat = moodCats.any((c) => c.toLowerCase() == p.category.toLowerCase());
-        if (matchesCat) s += 1000000; // 1 Million points!
-      }
-      
-      // 2. Super User Boost
-      if (_showSuperUsersFirst && p.isSuperUser) s += 100000;
-      
-      // 3. General Vibe Score
-      s += VibeScore.forPost(p, prefs, mood: _mood) * 10;
-      return s;
+
+    if (!_showSuperUsersFirst) {
+      ranked.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return ranked;
     }
 
     ranked.sort((a, b) {
-      final cmp = boost(b).compareTo(boost(a));
-      if (cmp != 0) return cmp;
+      if (a.isSuperUser != b.isSuperUser) return a.isSuperUser ? -1 : 1;
       return b.createdAt.compareTo(a.createdAt);
     });
 

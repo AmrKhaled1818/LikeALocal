@@ -45,8 +45,20 @@ class _EditPostScreenState extends State<EditPostScreen> {
   bool _saving = false;
 
   static const _categories = [
-    'Restaurant', 'Café', 'Park', 'Viewpoint', 'Shop', 'Mall',
+    'Restaurant', 'Café', 'Mall', 'Park', 'Cultural', 'Viewpoint', 'Shop',
   ];
+
+  /// Maps legacy / off-list category values to the canonical ones.
+  static const _categoryAliases = {
+    'Cafe': 'Café',
+    'Museum': 'Cultural',
+    'Historic': 'Cultural',
+    'Bar': 'Restaurant',
+  };
+
+  static String _normalizeCategory(String raw) =>
+      _categoryAliases[raw] ??
+      (_categories.contains(raw) ? raw : 'Restaurant');
 
   @override
   void initState() {
@@ -57,7 +69,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
     _locationCtrl = TextEditingController(text: p.location);
     _tipsCtrl = TextEditingController(text: p.localTips);
     _dishesCtrl = TextEditingController(text: p.recommendedDishes.join(', '));
-    _selectedCategory = p.category;
+    _selectedCategory = _normalizeCategory(p.category);
     _pickedLat = p.lat != 0 ? p.lat : null;
     _pickedLng = p.lng != 0 ? p.lng : null;
     _keptImageUrls = List<String>.from(p.allImageUrls);

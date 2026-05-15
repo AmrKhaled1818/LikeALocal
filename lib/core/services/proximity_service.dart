@@ -105,8 +105,7 @@ class ProximityService {
   /// Initialize WorkManager and register the periodic proximity check.
   static Future<void> initialize() async {
     try {
-      await Workmanager().initialize(callbackDispatcher,
-          isInDebugMode: false);
+      await Workmanager().initialize(callbackDispatcher);
       await Workmanager().registerPeriodicTask(
         'proximityCheckUnique',
         _kTaskName,

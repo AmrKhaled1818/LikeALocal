@@ -95,7 +95,27 @@
       "Bash(command -v curl)",
       "Bash(command -v python3)",
       "Bash(python3 *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(firebase projects:list)",
+      "Bash(sed -n '140,160p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)",
+      "Bash(sed -n '885,900p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)",
+      "Bash(sed -n '88,107p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/edit/edit_post_screen.dart)",
+      "Bash(sed -n '10,30p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/faq/faq_screen.dart)",
+      "Bash(sed -n '518,560p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/settings/settings_screen.dart)",
+      "Bash(sed -n '25,40p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/leaderboard/leaderboard_screen.dart)",
+      "Bash(sed -n '29,45p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/notifications/notifications_screen.dart)",
+      "Bash(sed -n '62,78p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/shared/widgets/top_bar.dart)",
+      "Bash(sed -n '365,378p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/main.dart)",
+      "Bash(sed -n '238,255p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/chat/friends_sidebar.dart)",
+      "Bash(sed -n '362,378p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/chat/friends_sidebar.dart)",
+      "Bash(sed -n '88,110p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/settings/preference_quiz_screen.dart)",
+      "Bash(sed -n '785,800p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)",
+      "Bash(sed -n '984,1000p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)",
+      "Bash(sed -n '1058,1075p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/feed/post_detail_screen.dart)",
+      "Bash(sed -n '370,385p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/chat/conversation_screen.dart)",
+      "Bash(sed -n '845,860p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/chat/conversation_screen.dart)",
+      "Bash(sed -n '168,185p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)",
+      "Bash(sed -n '327,345p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)"
     ]
   }
 }

@@ -68,8 +68,10 @@ class PostModel {
         checkinsByHour = checkinsByHour ?? const {};
 
   /// All image URLs for this post. Falls back to legacy single imageUrl field.
+  /// Empty strings are filtered out to prevent CachedNetworkImage errors.
   List<String> get allImageUrls {
-    if (imageUrls.isNotEmpty) return imageUrls;
+    final urls = imageUrls.where((u) => u.isNotEmpty).toList();
+    if (urls.isNotEmpty) return urls;
     if (imageUrl.isNotEmpty) return [imageUrl];
     return [];
   }

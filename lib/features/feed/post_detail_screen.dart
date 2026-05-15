@@ -776,18 +776,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   Future<void> _confirmDeletePost(BuildContext context) async {
+    // Capture before the async gap so the linter is satisfied.
+    final postsProvider = context.read<PostsProvider>();
+    final router = GoRouter.of(context);
+
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Delete post?'),
         content: const Text('This will permanently delete your post and all its comments. This cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogCtx, true),
             style: ElevatedButton.styleFrom(backgroundColor: kDestructive),
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
@@ -796,8 +800,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
     if (confirm != true) return;
     if (!mounted) return;
-    final postsProvider = context.read<PostsProvider>();
-    final router = GoRouter.of(context);
     final ok = await postsProvider.deletePost(widget.postId);
     if (!mounted) return;
     if (ok) {

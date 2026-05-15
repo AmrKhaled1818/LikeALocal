@@ -382,32 +382,44 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 16),
 
                       // Google button
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => _googleSignIn(context),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: kMuted),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.network(
-                                'https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png',
-                                height: 18,
-                                width: 18,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.g_mobiledata,
-                                    color: kOrange),
-                              ),
-                              const SizedBox(width: 10),
-                              const Text('Continue with Google',
-                                  style:
-                                      TextStyle(color: kDark, fontSize: 14)),
-                            ],
+                      Consumer<AuthProvider>(
+                        builder: (context, auth, _) => SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: auth.isLoading
+                                ? null
+                                : () => _googleSignIn(context),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: kMuted),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: auth.isLoading
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Image.network(
+                                        'https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png',
+                                        height: 18,
+                                        width: 18,
+                                        errorBuilder: (_, __, ___) =>
+                                            const Icon(Icons.g_mobiledata,
+                                                color: kOrange),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Text('Continue with Google',
+                                          style: TextStyle(
+                                              color: kDark, fontSize: 14)),
+                                    ],
+                                  ),
                           ),
                         ),
                       ),

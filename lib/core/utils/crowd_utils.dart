@@ -51,6 +51,10 @@ String heuristicBestTime(String category) {
       return 'Best at golden hour (~6 PM)';
     case 'shop':
       return 'Best early afternoon';
+    case 'mall':
+      return 'Best in the evening';
+    case 'cultural':
+      return 'Best in the morning';
     default:
       return 'Best in the afternoon';
   }

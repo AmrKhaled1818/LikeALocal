@@ -93,9 +93,13 @@ class AIService {
         'HOW TO BEHAVE:\n'
         '- For greetings (hi, hello, hey, thanks, etc.): respond warmly in one sentence and ask what kind of place they are looking for.\n'
         '- For recommendation requests: suggest 2-3 places. Format each as: **Place Name** — Location: one-line reason.\n'
+        '- STRICT RULES for recommendations:\n'
+        '  * ONLY recommend places that appear in the app list above.\n'
+        '  * If the user names a specific area (e.g. "in Zamalek"), ONLY recommend places whose location contains that area. Do NOT recommend places from other areas.\n'
+        '  * If the user asks for a specific type (e.g. "cafe", "restaurant"), ONLY recommend places of that type from the app list.\n'
+        '  * If no matching places exist in the app list for the requested area/type, say so honestly and ask if they want nearby alternatives.\n'
         '- For vague requests: ask ONE short clarifying question (area, occasion, or type of place).\n'
         '- For non-recommendation questions: answer helpfully and concisely.\n'
-        '- Prefer places from the app list. Only suggest outside places if nothing fits.\n'
         '- Keep responses under 6 lines. No bullet points for greetings. NEVER narrate your reasoning.';
 
     // Build message history — drop leading AI messages, keep last 10.
@@ -233,7 +237,7 @@ class AIService {
         '- Pick 3 to 5 places ONLY from the list above (use the "id" field)\n'
         '- Order them as a sensible walking/short-ride route (nearby places consecutive)\n'
         '- If preferred place types are specified, prioritise those categories\n'
-        '- Match the time of day: cafés/parks for morning, bars/viewpoints for evening, restaurants for any time\n'
+        '- Match the time of day: cafés/parks for morning, viewpoints/cultural for evening, restaurants for any time\n'
         '- For couples/groups prefer atmospheric or social venues; for solo prefer easier solo-friendly spots\n'
         '- If transport is "walking only", keep stops geographically very close\n'
         '- Give a realistic stay in minutes and a one-line travel note from the previous stop\n'
@@ -292,7 +296,7 @@ class AIService {
         'You convert a short place-search phrase into JSON for the LikeALocal app. '
         'Respond with ONLY a JSON object of the form '
         '{"category": "", "atmosphere": "", "keywords": []}. '
-        'category must be one of: Restaurant, Bar, Café, Park, Viewpoint, Shop, or "" if unclear. '
+        'category must be one of: Restaurant, Café, Mall, Park, Cultural, Viewpoint, Shop, or "" if unclear. '
         'atmosphere is one short word like cozy, trendy, outdoor, historic, lively, quiet, or "". '
         'keywords is an array of 2-5 lowercase single words distilled from the phrase. No prose.';
     final raw = await _complete(

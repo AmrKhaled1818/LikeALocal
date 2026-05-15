@@ -58,13 +58,14 @@ class _MapScreenState extends State<MapScreen>
   static const _darkTileUrl =
       'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key={api_key}';
 
-  static const _categories = ['All', 'Restaurant', 'Bar', 'Café', 'Park', 'Viewpoint', 'Shop'];
+  static const _categories = ['All', 'Restaurant', 'Café', 'Mall', 'Park', 'Cultural', 'Viewpoint', 'Shop'];
 
   static const _categoryMap = {
     'Restaurant': ['Restaurant'],
-    'Bar': ['Bar'],
     'Café': ['Café', 'Cafe'],
+    'Mall': ['Mall'],
     'Park': ['Park'],
+    'Cultural': ['Cultural', 'Museum'],
     'Viewpoint': ['Viewpoint'],
     'Shop': ['Shop'],
   };
@@ -94,10 +95,6 @@ class _MapScreenState extends State<MapScreen>
     if (widget.focusPostId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _tryFocusPost();
-      });
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _toggleFollow();
       });
     }
   }
@@ -182,17 +179,17 @@ class _MapScreenState extends State<MapScreen>
       if (!mounted) return false;
       await showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogCtx) => AlertDialog(
           title: const Text('Location disabled'),
           content: const Text(
               'Turn on location services so the app can find your position.'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogCtx),
                 child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogCtx);
                 Geolocator.openLocationSettings();
               },
               child: const Text('Open Settings'),
@@ -210,17 +207,17 @@ class _MapScreenState extends State<MapScreen>
       if (!mounted) return false;
       await showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogCtx) => AlertDialog(
           title: const Text('Permission denied'),
           content: const Text(
               'Location access was permanently denied. Enable it in app settings.'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogCtx),
                 child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogCtx);
                 Geolocator.openAppSettings();
               },
               child: const Text('Open Settings'),
@@ -423,7 +420,6 @@ class _MapScreenState extends State<MapScreen>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -586,7 +582,7 @@ class _MapScreenState extends State<MapScreen>
     super.build(context); // AutomaticKeepAliveClientMixin
     return Consumer<PostsProvider>(
       builder: (context, posts, _) {
-        final filtered = _getFilteredPosts(posts.feedPosts);
+        final filtered = _getFilteredPosts(posts.allPosts);
 
         // F29 — Build post markers with distance badges
         final postMarkers = filtered.map((post) {
@@ -755,7 +751,7 @@ class _MapScreenState extends State<MapScreen>
                             children: [
                               Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: Theme.of(context).colorScheme.surface,
                                   borderRadius: BorderRadius.circular(10),
                                   boxShadow: [
                                     BoxShadow(
@@ -798,12 +794,12 @@ class _MapScreenState extends State<MapScreen>
                               if (_showSuggestions)
                                 Consumer<PostsProvider>(
                                   builder: (_, postsP, __) {
-                                    final suggestions = _getSuggestions(postsP.feedPosts);
+                                    final suggestions = _getSuggestions(postsP.allPosts);
                                     if (suggestions.isEmpty) return const SizedBox.shrink();
                                     return Container(
                                       margin: const EdgeInsets.only(top: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: Theme.of(context).colorScheme.surface,
                                         borderRadius: BorderRadius.circular(10),
                                         boxShadow: [
                                           BoxShadow(
@@ -907,7 +903,7 @@ class _MapScreenState extends State<MapScreen>
                         final cat = _categories[i];
                         final selected = cat == _selectedCategory;
                         // Count posts matching this category
-                        final allPosts = posts.feedPosts.where((p) => p.lat != 0).toList();
+                        final allPosts = posts.allPosts.where((p) => p.lat != 0).toList();
                         final count = cat == 'All'
                             ? allPosts.length
                             : allPosts.where((p) =>
@@ -916,7 +912,7 @@ class _MapScreenState extends State<MapScreen>
                           onTap: () {
                             setState(() => _selectedCategory = cat);
                             if (cat != 'All') {
-                              _showCategoryList(cat, posts.feedPosts);
+                              _showCategoryList(cat, posts.allPosts);
                             }
                           },
                           child: Container(

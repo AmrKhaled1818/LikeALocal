@@ -52,10 +52,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   static const _categories = [
     'Restaurant',
     'Café',
+    'Mall',
     'Park',
+    'Cultural',
     'Viewpoint',
     'Shop',
-    'Mall',
   ];
 
   @override
@@ -841,6 +842,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         final uid = auth.uid;
         final newCount = (prefs.getInt('post_count_$uid') ?? 0) + 1;
         await prefs.setInt('post_count_$uid', newCount);
+        if (mounted) setState(() => _todayPostCount = newCount);
         _resetForm();
         Fluttertoast.showToast(
           msg: 'Post shared! Karma +10',

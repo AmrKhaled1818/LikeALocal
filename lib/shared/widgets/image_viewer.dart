@@ -32,8 +32,8 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     } else {
       final pos = _doubleTapDetails!.localPosition;
       _transformCtrl.value = Matrix4.identity()
-        ..translate(-pos.dx * 2, -pos.dy * 2, 0.0)
-        ..scale(3.0, 3.0, 1.0);
+        ..translateByDouble(-pos.dx * 2, -pos.dy * 2, 0.0, 1.0)
+        ..scaleByDouble(3.0, 3.0, 1.0, 1.0);
     }
   }
 

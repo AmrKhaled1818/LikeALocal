@@ -36,7 +36,7 @@ class _PreferenceQuizScreenState extends State<PreferenceQuizScreen> {
   ];
 
   static const _categoryOptions = [
-    'Restaurant', 'Café', 'Bar', 'Viewpoint', 'Park', 'Shop',
+    'Restaurant', 'Café', 'Mall', 'Park', 'Cultural', 'Viewpoint', 'Shop',
   ];
 
   void _next() {
@@ -251,15 +251,21 @@ class _OptionGrid extends StatelessWidget {
         mainAxisSpacing: 12,
       ),
       itemCount: options.length,
-      itemBuilder: (_, i) {
+      itemBuilder: (context, i) {
         final opt = options[i];
         final isSelected = selected == opt.value;
+        final cardBg = isSelected
+            ? kOrange
+            : Theme.of(context).colorScheme.surfaceContainerHighest;
+        final textColor = isSelected
+            ? Colors.white
+            : Theme.of(context).colorScheme.onSurface;
         return GestureDetector(
           onTap: () => onSelect(opt.value),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             decoration: BoxDecoration(
-              color: isSelected ? kOrange : Colors.white,
+              color: cardBg,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isSelected ? kOrange : kMuted,
@@ -285,13 +291,11 @@ class _OptionGrid extends StatelessWidget {
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
-                        color: isSelected ? Colors.white : kDark)),
+                        color: textColor)),
                 Text(opt.description,
                     style: TextStyle(
                         fontSize: 11,
-                        color: isSelected
-                            ? Colors.white70
-                            : kMutedFg)),
+                        color: isSelected ? Colors.white70 : kMutedFg)),
               ],
             ),
           ),

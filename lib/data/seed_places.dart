@@ -232,7 +232,7 @@ class SeedPlaces {
         location: 'Cairo-Alexandria Desert Road, Sheikh Zayed City',
         lat: 30.0450,
         lng: 30.9650,
-        category: 'Mall',
+        category: 'Park',
       ),
       _createSeedPost(
         postId: 'seed_point_90',
@@ -255,6 +255,21 @@ class SeedPlaces {
         lat: 30.0390,
         lng: 31.4560,
         category: 'Café',
+      ),
+
+      _createSeedPost(
+        postId: 'seed_gem_museum',
+        title: 'Grand Egyptian Museum (GEM)',
+        description:
+            'The world\'s largest archaeological museum, home to over 100,000 ancient Egyptian artefacts including the complete treasures of Tutankhamun.',
+        localTips:
+            'Book tickets online to skip the queue. Arrive early for the Tutankhamun galleries — they get very crowded by midday.',
+        imageUrl:
+            'https://images.unsplash.com/photo-1694621905584-e13cd7eb0ef7?auto=format&fit=crop&w=1400&q=80',
+        location: 'Giza (near the Pyramids)',
+        lat: 29.9884,
+        lng: 31.1281,
+        category: 'Cultural',
       ),
 
       // Sponsored content example
@@ -329,14 +344,24 @@ class SeedPlaces {
           batch.set(postsCollection.doc(place.postId), place.toMap());
           added++;
         } else {
-          // Document exists — patch imageUrl if it has changed
+          // Document exists — patch imageUrl/imageUrls or category if stale
+          final updates = <String, dynamic>{};
           final storedUrl = (existing['imageUrl'] as String?) ?? '';
           if (storedUrl != place.imageUrl) {
-            batch.update(
-              postsCollection.doc(place.postId),
-              {'imageUrl': place.imageUrl},
-            );
-            debugPrint('[SeedPlaces] Patching imageUrl for ${place.postId}');
+            updates['imageUrl'] = place.imageUrl;
+            // Always keep imageUrls in sync so allImageUrls reads the right URL
+            updates['imageUrls'] = [place.imageUrl];
+          }
+          // Also fix imageUrls if it's missing or contains the wrong value
+          final storedUrls = List<String>.from(existing['imageUrls'] ?? []);
+          if (storedUrls.isEmpty || (storedUrls.length == 1 && storedUrls.first != place.imageUrl)) {
+            updates['imageUrls'] = [place.imageUrl];
+          }
+          final storedCat = (existing['category'] as String?) ?? '';
+          if (storedCat != place.category) updates['category'] = place.category;
+          if (updates.isNotEmpty) {
+            batch.update(postsCollection.doc(place.postId), updates);
+            debugPrint('[SeedPlaces] Patching ${updates.keys.join(', ')} for ${place.postId}');
           }
         }
       }

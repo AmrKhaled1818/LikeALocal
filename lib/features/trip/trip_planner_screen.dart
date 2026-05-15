@@ -61,7 +61,7 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
   static const _budgetOptions = ['', 'cheap', 'mid-range', 'fine dining'];
   static const _budgetLabels = ['Any', 'Budget', 'Mid-range', 'Fine Dining'];
   static const _categoryOptions = [
-    'Restaurant', 'Café', 'Bar', 'Park', 'Viewpoint', 'Shop'
+    'Restaurant', 'Café', 'Mall', 'Park', 'Cultural', 'Viewpoint', 'Shop'
   ];
   static const _groupOptions = ['', 'solo', 'couple', 'small group', 'big group'];
   static const _groupLabels = ['Any', 'Solo', 'Couple', 'Small group (3–5)', 'Big group (6+)'];
@@ -104,6 +104,8 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
   }
 
   Future<void> _loadLastPlan() async {
+    // Capture before the async gap.
+    final postsProvider = context.read<PostsProvider>();
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_kPlanKey);
     if (saved == null) return;
@@ -112,7 +114,7 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
       final stops = (data['stops'] as List)
           .map((e) => TripStop.fromJson(e as Map<String, dynamic>))
           .toList();
-      final candidates = context.read<PostsProvider>().feedPosts;
+      final candidates = postsProvider.allPosts;
       if (candidates.isEmpty) {
         _showSnack('Load the feed first, then try again.');
         return;
@@ -181,7 +183,7 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
   }
 
   Future<void> _planTrip() async {
-    final candidates = context.read<PostsProvider>().feedPosts;
+    final candidates = context.read<PostsProvider>().allPosts;
     if (candidates.isEmpty) {
       _showSnack('Load the feed first, then come back to plan a trip.');
       return;

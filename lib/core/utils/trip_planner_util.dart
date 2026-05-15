@@ -35,6 +35,10 @@ int stayMinutesFor(String category) {
       return 30;
     case 'shop':
       return 40;
+    case 'mall':
+      return 90;
+    case 'cultural':
+      return 60;
     default:
       return 45;
   }
