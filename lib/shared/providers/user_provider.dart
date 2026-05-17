@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../data/models/user_model.dart';
@@ -9,6 +10,7 @@ class UserProvider extends ChangeNotifier {
   final UserRepo _repo = UserRepo();
 
   UserModel? _currentUser;
+  StreamSubscription<UserModel?>? _userSub;
 
   UserModel? get currentUser => _currentUser;
 
@@ -18,10 +20,17 @@ class UserProvider extends ChangeNotifier {
   }
 
   void startWatching(String uid) {
-    _repo.watchUser(uid).listen((user) {
+    _userSub?.cancel();
+    _userSub = _repo.watchUser(uid).listen((user) {
       _currentUser = user;
       notifyListeners();
     });
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
   }
 
   Future<void> updateProfile(

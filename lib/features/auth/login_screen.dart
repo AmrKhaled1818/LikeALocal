@@ -68,18 +68,11 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loadRememberedEmail() async {
     try {
       final savedEmail = await _storage.read(key: 'remembered_email');
-      final savedPassword = await _storage.read(key: 'remembered_password');
       if (savedEmail != null && savedEmail.isNotEmpty && mounted) {
         setState(() {
           _emailCtrl.text = savedEmail;
           _rememberMe = true;
           _emailTouched = true;
-        });
-      }
-      if (savedPassword != null && savedPassword.isNotEmpty && mounted) {
-        setState(() {
-          _passwordCtrl.text = savedPassword;
-          _passwordTouched = true;
         });
       }
     } catch (_) {}
@@ -89,12 +82,11 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_rememberMe) {
         await _storage.write(key: 'remembered_email', value: email);
-        await _storage.write(
-            key: 'remembered_password', value: _passwordCtrl.text);
       } else {
         await _storage.delete(key: 'remembered_email');
-        await _storage.delete(key: 'remembered_password');
       }
+      // Remove any previously stored password for security
+      await _storage.delete(key: 'remembered_password');
     } catch (_) {}
   }
 

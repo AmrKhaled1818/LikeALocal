@@ -6,7 +6,8 @@ class MessageModel {
   final String text;
   final String type; // text, image, ai_response
   final Timestamp createdAt;
-  final List<String> readBy; // F32 — UIDs that have read this message
+  final List<String> readBy;
+  final String imageUrl; // non-empty for type == 'image'
 
   MessageModel({
     required this.msgId,
@@ -15,6 +16,7 @@ class MessageModel {
     this.type = 'text',
     Timestamp? createdAt,
     List<String>? readBy,
+    this.imageUrl = '',
   })  : createdAt = createdAt ?? Timestamp.now(),
         readBy = readBy ?? [];
 
@@ -26,6 +28,7 @@ class MessageModel {
       type: map['type'] ?? 'text',
       createdAt: map['createdAt'] ?? Timestamp.now(),
       readBy: List<String>.from(map['readBy'] ?? []),
+      imageUrl: map['imageUrl'] ?? '',
     );
   }
 
@@ -36,6 +39,7 @@ class MessageModel {
       'type': type,
       'createdAt': createdAt,
       'readBy': readBy,
+      'imageUrl': imageUrl,
     };
   }
 }
@@ -46,6 +50,8 @@ class ChatModel {
   final bool isGroup;
   final String? groupName;
   final String lastMessage;
+  final String lastSenderName; // username of whoever sent lastMessage
+  final String lastSenderId;
   final Timestamp lastMessageAt;
   final Map<String, int> unreadCount;
 
@@ -55,6 +61,8 @@ class ChatModel {
     this.isGroup = false,
     this.groupName,
     this.lastMessage = '',
+    this.lastSenderName = '',
+    this.lastSenderId = '',
     Timestamp? lastMessageAt,
     Map<String, int>? unreadCount,
   })  : lastMessageAt = lastMessageAt ?? Timestamp.now(),
@@ -67,6 +75,8 @@ class ChatModel {
       isGroup: map['isGroup'] ?? false,
       groupName: map['groupName'],
       lastMessage: map['lastMessage'] ?? '',
+      lastSenderName: map['lastSenderName'] ?? '',
+      lastSenderId: map['lastSenderId'] ?? '',
       lastMessageAt: map['lastMessageAt'] ?? Timestamp.now(),
       unreadCount: Map<String, int>.from(map['unreadCount'] ?? {}),
     );
@@ -79,6 +89,8 @@ class ChatModel {
       'isGroup': isGroup,
       'groupName': groupName,
       'lastMessage': lastMessage,
+      'lastSenderName': lastSenderName,
+      'lastSenderId': lastSenderId,
       'lastMessageAt': lastMessageAt,
       'unreadCount': unreadCount,
     };
@@ -92,6 +104,7 @@ class NotificationModel {
   final String title;
   final String body;
   final String? postId;
+  final String? chatId; // set when type == 'message'
   final bool read;
   final Timestamp createdAt;
 
@@ -102,6 +115,7 @@ class NotificationModel {
     required this.title,
     required this.body,
     this.postId,
+    this.chatId,
     this.read = false,
     Timestamp? createdAt,
   }) : createdAt = createdAt ?? Timestamp.now();
@@ -114,6 +128,7 @@ class NotificationModel {
       title: map['title'] ?? '',
       body: map['body'] ?? '',
       postId: map['postId'],
+      chatId: map['chatId'],
       read: map['read'] ?? false,
       createdAt: map['createdAt'] ?? Timestamp.now(),
     );
@@ -126,6 +141,7 @@ class NotificationModel {
       'title': title,
       'body': body,
       'postId': postId,
+      'chatId': chatId,
       'read': read,
       'createdAt': createdAt,
     };

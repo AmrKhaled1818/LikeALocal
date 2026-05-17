@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:toastification/toastification.dart';
 
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -57,7 +58,7 @@ void main() async {
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
   await NotificationService.initialize();
-  await ProximityService.initialize();
+  await ProximityService.setup();
   runApp(const LikeALocalApp());
 }
 
@@ -89,12 +90,13 @@ class _AppRouter extends StatefulWidget {
   State<_AppRouter> createState() => _AppRouterState();
 }
 
-class _AppRouterState extends State<_AppRouter> {
+class _AppRouterState extends State<_AppRouter> with WidgetsBindingObserver {
   late final GoRouter _router;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final authProvider = context.read<AuthProvider>();
     _router = GoRouter(
       initialLocation: '/splash',
@@ -203,15 +205,34 @@ class _AppRouterState extends State<_AppRouter> {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final auth = context.read<AuthProvider>();
+    if (state == AppLifecycleState.resumed) {
+      auth.setOnline(true);
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      auth.setOnline(false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    return MaterialApp.router(
-      title: 'LikeALocal',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.theme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeProvider.mode,
-      routerConfig: _router,
+    return ToastificationWrapper(
+      child: MaterialApp.router(
+        title: 'LikeALocal',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.theme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeProvider.mode,
+        routerConfig: _router,
+      ),
     );
   }
 }
@@ -227,6 +248,36 @@ class _MainShell extends StatefulWidget {
 
 class _MainShellState extends State<_MainShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  late final AuthProvider _authProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _authProvider = context.read<AuthProvider>();
+      _authProvider.addListener(_onAuthChanged);
+      _onAuthChanged();
+      ProximityService.maybeRequestConsent(context);
+    });
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    final uid = _authProvider.uid;
+    final chatProvider = context.read<ChatProvider>();
+    if (uid.isNotEmpty) {
+      chatProvider.startListening(uid);
+    } else {
+      chatProvider.stopListening();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authProvider.removeListener(_onAuthChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

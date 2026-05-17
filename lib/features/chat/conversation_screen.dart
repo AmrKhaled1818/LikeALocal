@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
@@ -12,8 +14,11 @@ import '../../core/utils/responsive.dart';
 import '../../core/utils/toast_utils.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/post_model.dart';
+import '../../data/models/user_model.dart';
+import '../../data/repositories/chat_repo.dart';
 import '../../data/repositories/user_repo.dart';
 import '../../data/services/ai_service.dart';
+import '../../data/services/cloudinary_service.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/chat_provider.dart';
 import '../../shared/providers/posts_provider.dart';
@@ -30,8 +35,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _sending = false;
+  bool _sendingImage = false;
   Position? _position;
   String? _otherUsername;
+  String? _otherUid;
 
   // Typing-indicator state
   late final ChatProvider _chatRef;
@@ -83,6 +90,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _chatRef = context.read<ChatProvider>();
     _uid = context.read<AuthProvider>().uid;
     _typingStream = _chatRef.watchTyping(widget.chatId, _uid);
+    _chatRef.setCurrentChat(widget.chatId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _chatRef.markRead(widget.chatId, _uid);
       if (!_isAiChat) _loadOtherUsername(_uid);
@@ -147,7 +155,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Future<void> _loadOtherUsername(String myUid) async {
     try {
-      // chatId for DMs is the Firestore document ID; look up participants
       final doc = await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
@@ -160,9 +167,82 @@ class _ConversationScreenState extends State<ConversationScreen> {
       if (otherUid.isEmpty) return;
       final user = await UserRepo().getUser(otherUid);
       if (mounted && user != null) {
-        setState(() => _otherUsername = user.username);
+        setState(() {
+          _otherUsername = user.username;
+          _otherUid = otherUid;
+        });
       }
     } catch (_) {}
+  }
+
+  Future<void> _sendImageMessage() async {
+    if (_sendingImage) return;
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (file == null || !mounted) return;
+
+    final chatProvider = context.read<ChatProvider>();
+    final auth = context.read<AuthProvider>();
+
+    setState(() => _sendingImage = true);
+    try {
+      final result = await CloudinaryService().uploadImage(file);
+      if (!mounted) return;
+      final msg = MessageModel(
+        msgId: '',
+        senderId: auth.uid,
+        text: '',
+        type: 'image',
+        imageUrl: result.imageUrl,
+        createdAt: Timestamp.now(),
+      );
+      await chatProvider.sendMessage(widget.chatId, msg, auth.uid);
+      _scrollToBottom();
+    } catch (_) {
+      if (mounted) AppToast.error('Failed to send image. Try again.');
+    } finally {
+      if (mounted) setState(() => _sendingImage = false);
+    }
+  }
+
+  Future<void> _deleteMessage(MessageModel msg) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete message',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () => Navigator.pop(context, true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(context, false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await ChatRepo().deleteMessage(widget.chatId, msg.msgId);
+      } catch (_) {
+        if (mounted) AppToast.error('Failed to delete message.');
+      }
+    }
+  }
+
+  String _formatLastSeen(Timestamp? ts) {
+    if (ts == null) return 'Offline';
+    final diff = DateTime.now().difference(ts.toDate());
+    if (diff.inMinutes < 1) return 'Last seen just now';
+    if (diff.inMinutes < 60) return 'Last seen ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Last seen ${diff.inHours}h ago';
+    return 'Last seen ${diff.inDays}d ago';
   }
 
   Future<void> _fetchLocation() async {
@@ -180,6 +260,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    _chatRef.setCurrentChat(null);
     _stopTyping();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -372,22 +453,49 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ),
         title: _isAiChat
             ? const _AiAppBarTitle()
-            : Text(
-                _otherUsername ?? 'Chat',
-                style:
-                    const TextStyle(color: Colors.white, fontSize: 16),
-              ),
+            : _otherUid == null
+                ? Text(_otherUsername ?? 'Chat',
+                    style: const TextStyle(color: Colors.white, fontSize: 16))
+                : StreamBuilder<UserModel?>(
+                    stream: UserRepo().watchUser(_otherUid!),
+                    builder: (_, snap) {
+                      final other = snap.data;
+                      final statusText = other == null
+                          ? ''
+                          : other.isReallyOnline
+                              ? 'Online'
+                              : _formatLastSeen(other.lastSeen);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _otherUsername ?? 'Chat',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          if (statusText.isNotEmpty)
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                color: other?.isReallyOnline == true
+                                    ? const Color(0xFF4ADE80)
+                                    : Colors.white60,
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
         actions: [
           if (_isAiChat)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.white70),
               tooltip: 'Clear chat',
               onPressed: _confirmClearChat,
-            ),
-          if (!_isAiChat)
-            IconButton(
-              icon: const Icon(Icons.info_outline, color: Colors.white),
-              onPressed: () {},
             ),
         ],
       ),
@@ -403,10 +511,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
           // Keep current messages available for AI sending (avoids redundant fetch)
           _currentMessages = messages;
 
-          // Only auto-scroll when a new message arrives, not on every rebuild
+          // When new messages arrive: scroll to bottom AND mark as read immediately.
+          // This keeps the unread badge at 0 and flips read receipts to blue ticks
+          // without requiring the user to leave and re-enter the chat.
           if (messages.length > _lastMsgCount) {
             _lastMsgCount = messages.length;
             WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _chatRef.markRead(widget.chatId, _uid);
               if (_scrollCtrl.hasClients) {
                 _scrollCtrl.animateTo(
                   _scrollCtrl.position.maxScrollExtent,
@@ -469,6 +581,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                       isMe: isMe,
                       isAi: isAi,
                       myUid: auth.uid,
+                      onDelete: (isMe && !_isAiChat)
+                          ? () => _deleteMessage(msg)
+                          : null,
                     ),
                     if (related.isNotEmpty)
                       _RelatedPostsRow(posts: related),
@@ -635,6 +750,32 @@ class _ConversationScreenState extends State<ConversationScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (!_isAiChat)
+                    _sendingImage
+                        ? const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: SizedBox(
+                              width: 36,
+                              height: 36,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: kOrange, strokeWidth: 2),
+                                ),
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.image_outlined,
+                                color: kMutedFg),
+                            tooltip: 'Send image',
+                            onPressed: _sendImageMessage,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 36, minHeight: 36),
+                          ),
                   Expanded(
                     child: Container(
                       constraints: const BoxConstraints(maxHeight: 120),
@@ -983,12 +1124,14 @@ class _MessageBubble extends StatelessWidget {
   final bool isMe;
   final bool isAi;
   final String myUid;
+  final VoidCallback? onDelete;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
     required this.isAi,
     required this.myUid,
+    this.onDelete,
   });
 
   @override
@@ -1036,68 +1179,97 @@ class _MessageBubble extends StatelessWidget {
               crossAxisAlignment:
                   isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.72,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isMe
-                        ? kOrange
-                        : isAi
-                            ? const Color(0xFFF3E8FF)
-                            : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isMe ? 16 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 16),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  // F37 — Render AI responses with markdown
-                  child: isAi
-                      ? MarkdownBody(
-                          data: message.text,
-                          styleSheet: MarkdownStyleSheet(
-                            p: const TextStyle(
-                                color: Color(0xFF6D28D9),
-                                fontSize: 14,
-                                height: 1.4),
-                            strong: const TextStyle(
-                                color: Color(0xFF6D28D9),
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold),
-                            listBullet: const TextStyle(
-                                color: Color(0xFF6D28D9), fontSize: 14),
-                            h1: const TextStyle(
-                                color: Color(0xFF6D28D9),
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold),
-                            h2: const TextStyle(
-                                color: Color(0xFF6D28D9),
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold),
+                GestureDetector(
+                  onLongPress: onDelete,
+                  child: message.type == 'image' && message.imageUrl.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: Radius.circular(isMe ? 16 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 16),
+                          ),
+                          child: CachedNetworkImage(
+                            imageUrl: message.imageUrl,
+                            width: 220,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              width: 220,
+                              height: 160,
+                              color: kMuted,
+                              child: const Center(
+                                  child: CircularProgressIndicator(
+                                      color: kOrange, strokeWidth: 2)),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              width: 220,
+                              height: 120,
+                              color: kMuted,
+                              child: const Icon(Icons.broken_image,
+                                  color: kMutedFg),
+                            ),
                           ),
                         )
-                      : Text(
-                          message.text,
-                          style: TextStyle(
-                            color: isMe ? Colors.white : kDark,
-                            fontSize: 14,
-                            height: 1.4,
+                      : Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.sizeOf(context).width * 0.72,
                           ),
+                          decoration: BoxDecoration(
+                            color: isMe
+                                ? kOrange
+                                : isAi
+                                    ? const Color(0xFFF3E8FF)
+                                    : Colors.white,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(16),
+                              topRight: const Radius.circular(16),
+                              bottomLeft: Radius.circular(isMe ? 16 : 4),
+                              bottomRight: Radius.circular(isMe ? 4 : 16),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: isAi
+                              ? MarkdownBody(
+                                  data: message.text,
+                                  styleSheet: MarkdownStyleSheet(
+                                    p: const TextStyle(
+                                        color: Color(0xFF6D28D9),
+                                        fontSize: 14,
+                                        height: 1.4),
+                                    strong: const TextStyle(
+                                        color: Color(0xFF6D28D9),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold),
+                                    listBullet: const TextStyle(
+                                        color: Color(0xFF6D28D9), fontSize: 14),
+                                    h1: const TextStyle(
+                                        color: Color(0xFF6D28D9),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold),
+                                    h2: const TextStyle(
+                                        color: Color(0xFF6D28D9),
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                )
+                              : Text(
+                                  message.text,
+                                  style: TextStyle(
+                                    color: isMe ? Colors.white : kDark,
+                                    fontSize: 14,
+                                    height: 1.4,
+                                  ),
+                                ),
                         ),
                 ),
-                // F32 — Read receipt ticks (only on my sent messages):
-                // single grey check = sent, double blue check = read.
                 if (isMe && !isAi) ...[
                   const SizedBox(height: 2),
                   Row(

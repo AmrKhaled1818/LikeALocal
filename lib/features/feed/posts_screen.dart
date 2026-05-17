@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/vibe_score.dart';
 import '../../data/models/post_model.dart';
+import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import '../../core/utils/responsive.dart';
 import '../../shared/widgets/error_retry.dart';
@@ -75,7 +76,17 @@ class _PostsScreenState extends State<PostsScreen>
       builder: (context, data, _) {
         final (_, isLoadingMore, hasMore, mood, _) = data;
         final posts = context.read<PostsProvider>();
-        final feedPosts = posts.rankedFeed();
+        // Subscribe to prefs changes so the feed re-ranks when the user
+        // updates their saved preferences. The selected value is discarded —
+        // we only need the dependency registration.
+        context.select<AuthProvider, String>((a) {
+          final pr = a.userModel?.preferences ?? const {};
+          return '${pr['budget']}|${pr['atmosphere']}|'
+              '${(pr['favCategories'] as List?)?.join(',') ?? ''}';
+        });
+        final userPrefs =
+            context.read<AuthProvider>().userModel?.preferences;
+        final feedPosts = posts.rankedFeed(userPrefs);
         return RefreshIndicator(
           color: kOrange,
           onRefresh: () async {

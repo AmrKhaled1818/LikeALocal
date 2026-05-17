@@ -487,22 +487,26 @@ class _PostCardState extends State<PostCard>
   }
 
   Widget _buildVideoPlaceholder(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      height: 160,
-      decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_circle_outline, color: Colors.white70, size: 48),
-            SizedBox(height: 6),
-            Text('Tap to watch video',
-                style: TextStyle(color: Colors.white60, fontSize: 12)),
-          ],
+    return Semantics(
+      label: 'Video: ${widget.post.title}. Tap to watch.',
+      button: true,
+      child: Container(
+        margin: const EdgeInsets.only(top: 10),
+        height: 160,
+        decoration: const BoxDecoration(
+          color: Colors.black87,
+          borderRadius: BorderRadius.zero,
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.play_circle_outline, color: Colors.white70, size: 48),
+              SizedBox(height: 6),
+              Text('Tap to watch video',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ],
+          ),
         ),
       ),
     );

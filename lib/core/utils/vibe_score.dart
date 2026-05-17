@@ -56,45 +56,70 @@ bool _catEquals(String a, String b) {
 
 /// Computes a 0–100 "vibe match" percentage for [post] against the user's saved
 /// [prefs] (`favCategories`, `budget`, `atmosphere`) plus the live [mood].
-/// Always returns at least a small baseline so a card never reads as a hard 0%.
+/// Deterministic — the same (post, prefs, mood) triple always returns the same
+/// score. When a mood is selected, mood signals dominate so the feed visibly
+/// reorders. When neither mood nor prefs are set, scoring leans on content
+/// completeness + popularity so popular, well-written posts rank highest.
 class VibeScore {
   static int forPost(PostModel post, Map<String, dynamic>? prefs,
       {String mood = ''}) {
     final p = prefs ?? const <String, dynamic>{};
-    int score = 35; // baseline
-
-    final favCats = ((p['favCategories'] as List?) ?? const [])
-        .map((e) => e.toString())
-        .toList();
-    if (favCats.isNotEmpty) {
-      if (favCats.any((c) => _catEquals(c, post.category))) score += 30;
-    } else {
-      score += 12; // no prefs yet → mild neutral bump
-    }
+    int score = 30; // baseline — every post starts here
 
     final haystack = ('${post.title} ${post.description} ${post.localTips} '
-            '${post.recommendedDishes.join(' ')}')
+            '${post.recommendedDishes.join(' ')} ${post.category}')
         .toLowerCase();
 
+    // ── Saved category preferences ────────────────────────────────────────
+    final favCats = ((p['favCategories'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (favCats.isNotEmpty &&
+        favCats.any((c) => _catEquals(c, post.category))) {
+      score += 22;
+    }
+
+    // ── Atmosphere preference ─────────────────────────────────────────────
     final atm = (p['atmosphere'] ?? '').toString().toLowerCase();
-    if (atm.isNotEmpty && (_atmosphereKeywords[atm] ?? const []).any(haystack.contains)) {
-      score += 15;
+    if (atm.isNotEmpty) {
+      final kws = _atmosphereKeywords[atm] ?? const <String>[];
+      final hits = kws.where(haystack.contains).length;
+      if (hits > 0) score += (hits * 4).clamp(0, 12);
     }
 
+    // ── Budget preference ─────────────────────────────────────────────────
     final budget = (p['budget'] ?? '').toString().toLowerCase();
-    if (budget == 'low' && _lowBudgetWords.any(haystack.contains)) score += 8;
-    if (budget == 'high' && _highBudgetWords.any(haystack.contains)) score += 8;
-    if (budget == 'mid') score += 4;
+    if (budget == 'low' && _lowBudgetWords.any(haystack.contains)) score += 6;
+    if (budget == 'high' && _highBudgetWords.any(haystack.contains)) score += 6;
 
+    // ── Mood (live selector) — DOMINANT signal when selected ──────────────
+    // Big positive for matching category + per-keyword hits, and an explicit
+    // penalty for off-mood category so the feed visibly reorders.
     if (mood.isNotEmpty) {
-      final moodCats = kMoodCategories[mood] ?? const [];
-      if (moodCats.any((c) => _catEquals(c, post.category))) score += 8;
-      if ((_moodKeywords[mood] ?? const []).any(haystack.contains)) score += 6;
+      final moodCats = kMoodCategories[mood] ?? const <String>[];
+      final isMoodCat = moodCats.any((c) => _catEquals(c, post.category));
+      if (isMoodCat) {
+        score += 28;
+      } else {
+        score -= 12;
+      }
+      final moodKws = _moodKeywords[mood] ?? const <String>[];
+      final kwHits = moodKws.where(haystack.contains).length;
+      score += (kwHits * 5).clamp(0, 18);
     }
 
-    score += post.upvotes.clamp(0, 12);
+    // ── Content completeness — rewards effort, deterministic per post ─────
+    if (post.description.length >= 60) score += 4;
+    if (post.recommendedDishes.isNotEmpty) score += 3;
+    if (post.localTips.isNotEmpty) score += 3;
+    if (post.imageUrls.length > 1 || post.imageUrl.isNotEmpty) score += 2;
 
-    return score.clamp(0, 100);
+    // ── Popularity nudge — capped so it never dominates personalization ──
+    score += post.upvotes.clamp(0, 10);
+
+    // Floor at 15 so cards never read as a hard 0%; cap at 100.
+    return score.clamp(15, 100);
   }
 
   /// Bucketed label for a score, e.g. "Top match" / "Great fit".

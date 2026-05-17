@@ -13,7 +13,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/utils/toast_utils.dart';
 import '../../core/utils/validators.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import '../../data/models/post_model.dart';
 import '../../data/services/ai_service.dart';
 import '../../shared/providers/auth_provider.dart';
@@ -844,12 +843,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         await prefs.setInt('post_count_$uid', newCount);
         if (mounted) setState(() => _todayPostCount = newCount);
         _resetForm();
-        Fluttertoast.showToast(
-          msg: 'Post shared! Karma +10',
-          toastLength: Toast.LENGTH_SHORT,
-          backgroundColor: Colors.green,
-          textColor: Colors.white,
-        );
+        AppToast.success('Post shared! Karma +10');
         if (!mounted) return;
         context.go('/feed');
       } else if (mounted) {

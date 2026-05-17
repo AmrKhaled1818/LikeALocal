@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/message_model.dart';
 import 'user_repo.dart';
 
@@ -70,15 +71,30 @@ class ChatRepo {
     data['msgId'] = ref.id;
     await ref.set(data);
 
+    // Fetch sender name once so we can store it on the chat doc AND
+    // use it in the notification body. Falls back to 'Someone' on failure.
+    String senderName = '';
+    if (senderId.isNotEmpty && senderId != 'ai') {
+      try {
+        final senderDoc = await _db.collection('users').doc(senderId).get();
+        senderName = (senderDoc.data()?['username'] as String?) ?? '';
+      } catch (_) {}
+    }
+    if (senderName.isEmpty) senderName = senderId == 'ai' ? 'AI' : 'Someone';
+
     final chatDoc = await _db.collection('chats').doc(chatId).get();
+    String recipientId = '';
     if (chatDoc.exists) {
       final participants =
           List<String>.from(chatDoc.data()!['participants'] ?? []);
-      final recipientId =
+      recipientId =
           participants.firstWhere((p) => p != senderId, orElse: () => '');
+      final lastMsg = message.type == 'image' ? '📷 Photo' : message.text;
       Map<String, dynamic> update = {
-        'lastMessage': message.text,
+        'lastMessage': lastMsg,
         'lastMessageAt': Timestamp.now(),
+        'lastSenderName': senderName,
+        'lastSenderId': senderId,
       };
       if (recipientId.isNotEmpty) {
         update['unreadCount.$recipientId'] = FieldValue.increment(1);
@@ -86,7 +102,40 @@ class ChatRepo {
       await _db.collection('chats').doc(chatId).update(update);
     }
 
-    await _userRepo.addKarma(senderId, 3);
+    // Write a notification doc — body is intentionally generic
+    // ("X sent you a message") to keep message contents private.
+    if (!chatId.startsWith('ai_') &&
+        recipientId.isNotEmpty &&
+        senderId != 'ai') {
+      try {
+        final body = message.type == 'image'
+            ? '$senderName sent you a photo'
+            : '$senderName sent you a message';
+        final notifRef = _db.collection('notifications').doc();
+        await notifRef.set({
+          'notifId': notifRef.id,
+          'userId': recipientId,
+          'type': 'message',
+          'title': 'New message',
+          'body': body,
+          'postId': null,
+          'chatId': chatId,
+          'read': false,
+          'createdAt': Timestamp.now(),
+        });
+      } catch (_) {}
+    }
+
+    if (senderId != 'ai') await _userRepo.addKarma(senderId, 3);
+  }
+
+  Future<void> deleteMessage(String chatId, String msgId) async {
+    await _db
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .doc(msgId)
+        .delete();
   }
 
   Future<void> clearChat(String chatId) async {
@@ -136,28 +185,32 @@ class ChatRepo {
   }
 
   Future<void> markRead(String chatId, String userId) async {
-    // Reset unread counter
-    await _db
-        .collection('chats')
-        .doc(chatId)
-        .update({'unreadCount.$userId': 0});
+    try {
+      // Reset unread counter
+      await _db
+          .collection('chats')
+          .doc(chatId)
+          .update({'unreadCount.$userId': 0});
 
-    // F32 — Mark all messages NOT sent by this user as read by this user
-    final snap = await _db
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .where('senderId', isNotEqualTo: userId)
-        .get();
+      // Mark all messages NOT sent by this user as read by this user
+      final snap = await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: userId)
+          .get();
 
-    if (snap.docs.isEmpty) return;
-    final batch = _db.batch();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'readBy': FieldValue.arrayUnion([userId]),
-      });
+      if (snap.docs.isEmpty) return;
+      final batch = _db.batch();
+      for (final doc in snap.docs) {
+        batch.update(doc.reference, {
+          'readBy': FieldValue.arrayUnion([userId]),
+        });
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('ChatRepo.markRead error: $e');
     }
-    await batch.commit();
   }
 
   String aiChatId(String userId) => 'ai_$userId';

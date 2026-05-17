@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/utils/vibe_score.dart';
 import '../../data/models/post_model.dart';
 import '../../data/models/comment_model.dart';
 import '../../data/repositories/posts_repo.dart';
@@ -99,23 +100,54 @@ class PostsProvider extends ChangeNotifier {
   }
 
   /// Feed ordered for display.
-  /// Toggle OFF → pure newest-first (no scoring).
-  /// Toggle ON  → super user posts first (newest-first within group),
-  ///              then everyone else (newest-first). No vibe scoring in either mode.
+  ///
+  /// Ranking rules (applied in order):
+  ///   1. If `showSuperUsersFirst` is on, Super User posts are grouped at top.
+  ///   2. Within each group, if a mood is selected OR the user has meaningful
+  ///      preferences, posts are sorted by Vibe Match score (high → low).
+  ///   3. Ties / no-personalization → newest-first.
+  ///
+  /// Scores are computed once per call and cached locally in a Map so the
+  /// sort comparator doesn't recompute them O(n log n) times.
   List<PostModel> rankedFeed([Map<String, dynamic>? prefs]) {
     final ranked = List<PostModel>.from(_feedPosts);
 
-    if (!_showSuperUsersFirst) {
-      ranked.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return ranked;
+    final hasMood = _mood.isNotEmpty;
+    final hasPrefs = prefs != null && _hasMeaningfulPrefs(prefs);
+    final useVibeRanking = hasMood || hasPrefs;
+
+    // Pre-compute scores once (avoids re-running VibeScore inside the comparator).
+    final scoreCache = <String, int>{};
+    if (useVibeRanking) {
+      for (final post in ranked) {
+        scoreCache[post.postId] =
+            VibeScore.forPost(post, prefs, mood: _mood);
+      }
     }
 
     ranked.sort((a, b) {
-      if (a.isSuperUser != b.isSuperUser) return a.isSuperUser ? -1 : 1;
+      // 1. Super User grouping
+      if (_showSuperUsersFirst && a.isSuperUser != b.isSuperUser) {
+        return a.isSuperUser ? -1 : 1;
+      }
+      // 2. Vibe score (high → low)
+      if (useVibeRanking) {
+        final sa = scoreCache[a.postId] ?? 0;
+        final sb = scoreCache[b.postId] ?? 0;
+        if (sa != sb) return sb.compareTo(sa);
+      }
+      // 3. Recency
       return b.createdAt.compareTo(a.createdAt);
     });
 
     return ranked;
+  }
+
+  static bool _hasMeaningfulPrefs(Map<String, dynamic> prefs) {
+    final cats = (prefs['favCategories'] as List?) ?? const [];
+    final atm = (prefs['atmosphere'] ?? '').toString();
+    final budget = (prefs['budget'] ?? '').toString();
+    return cats.isNotEmpty || atm.isNotEmpty || budget.isNotEmpty;
   }
 
   Future<void> _loadFirstPage() async {

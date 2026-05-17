@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -101,33 +102,87 @@ Future<void> _showNotification({
   );
 }
 
+const _kConsentKey = 'proximity_consent_given';
+
 class ProximityService {
-  /// Initialize WorkManager and register the periodic proximity check.
-  static Future<void> initialize() async {
+  /// Registers the WorkManager callback dispatcher. Must be called from main()
+  /// before the app runs, so the background isolate has a known entry point.
+  /// Does NOT schedule the periodic task — call [maybeRequestConsent] for that.
+  static Future<void> setup() async {
+    if (kIsWeb) return;
     try {
       await Workmanager().initialize(callbackDispatcher);
-      await Workmanager().registerPeriodicTask(
-        'proximityCheckUnique',
-        _kTaskName,
-        frequency: const Duration(minutes: 15),
-        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-        constraints: Constraints(
-          networkType: NetworkType.notRequired,
-          requiresBatteryNotLow: true,
-        ),
-      );
+      // Re-register task if consent was already given in a previous session.
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_kConsentKey) == true) {
+        await _registerTask();
+      }
     } catch (e) {
-      debugPrint('ProximityService.initialize error: $e');
+      debugPrint('ProximityService.setup error: $e');
     }
+  }
+
+  /// Shows a one-time opt-in dialog explaining background location use.
+  /// If the user accepts (or already accepted), registers the periodic task.
+  /// Safe to call multiple times — skips the dialog after first answer.
+  static Future<void> maybeRequestConsent(BuildContext context) async {
+    if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.containsKey(_kConsentKey)) return; // already answered
+
+    if (!context.mounted) return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nearby Place Alerts'),
+        content: const Text(
+          'LikeALocal can notify you when you\'re near a saved hidden gem. '
+          'This uses background location access every 15 minutes.\n\n'
+          'You can turn this off anytime in your device settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not Now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+
+    await prefs.setBool(_kConsentKey, accepted ?? false);
+    if (accepted == true) {
+      await _registerTask();
+    }
+  }
+
+  static Future<void> _registerTask() async {
+    await Workmanager().registerPeriodicTask(
+      'proximityCheckUnique',
+      _kTaskName,
+      frequency: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+      constraints: Constraints(
+        networkType: NetworkType.notRequired,
+        requiresBatteryNotLow: true,
+      ),
+    );
   }
 
   /// Cache saved-post lat/lng data in SharedPreferences so the background
   /// isolate can read it without needing Firebase.
   static Future<void> cacheSavedPosts(
       List<Map<String, dynamic>> posts) async {
+    if (kIsWeb) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kSavedPostsCacheKey, jsonEncode(posts));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ProximityService.cacheSavedPosts error: $e');
+    }
   }
 }

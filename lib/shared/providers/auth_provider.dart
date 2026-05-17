@@ -1,4 +1,4 @@
-import 'dart:async' show StreamSubscription, TimeoutException;
+import 'dart:async' show StreamSubscription, TimeoutException, Timer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -18,8 +18,9 @@ class AuthProvider extends ChangeNotifier {
 
   // Subscription reference so we can cancel it on sign-out / re-login
   StreamSubscription<UserModel?>? _userSub;
-  StreamSubscription? _notifSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notifSub;
   bool _notifInitialized = false;
+  Timer? _heartbeatTimer;
 
   User? get firebaseUser => _firebaseUser;
   UserModel? get userModel => _userModel;
@@ -35,14 +36,27 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _onAuthStateChanged(User? user) async {
     await _userSub?.cancel();
     await _notifSub?.cancel();
+    _heartbeatTimer?.cancel();
     _userSub = null;
     _notifSub = null;
+    _heartbeatTimer = null;
 
     _firebaseUser = user;
     if (user != null) {
       _userSub = _userRepo.watchUser(user.uid).listen((model) {
         _userModel = model;
         notifyListeners();
+      });
+      try {
+        await _userRepo.setOnlineStatus(user.uid, true);
+      } catch (_) {}
+
+      // Heartbeat: update lastSeen every 60s so isReallyOnline stays accurate
+      // even if the app is force-killed (lastSeen goes stale → shows offline after 2 min)
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+        if (_firebaseUser != null) {
+          _userRepo.updateUser(_firebaseUser!.uid, {'lastSeen': Timestamp.now()}).catchError((_) {});
+        }
       });
       try {
         final token = await NotificationService.requestPermissionAndGetToken();
@@ -63,7 +77,8 @@ class AuthProvider extends ChangeNotifier {
           return; // skip pre-existing notifications on login
         }
         // Only react to newly added docs; filter type client-side (avoids composite index)
-        const pushableTypes = {'upvote', 'superuser', 'comment', 'message', 'nearby'};
+        // 'message' is handled by ChatProvider to avoid duplicates and support open-chat suppression
+        const pushableTypes = {'upvote', 'superuser', 'comment', 'nearby'};
         for (final change in snap.docChanges) {
           if (change.type != DocumentChangeType.added) continue;
           final data = change.doc.data();
@@ -160,7 +175,17 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    final uid = _firebaseUser?.uid;
+    if (uid != null) {
+      try { await _userRepo.setOnlineStatus(uid, false); } catch (_) {}
+    }
     await _authRepo.signOut();
+  }
+
+  Future<void> setOnline(bool online) async {
+    final uid = _firebaseUser?.uid;
+    if (uid == null) return;
+    try { await _userRepo.setOnlineStatus(uid, online); } catch (_) {}
   }
 
   Future<bool> deleteAccount() async {
@@ -217,6 +242,7 @@ class AuthProvider extends ChangeNotifier {
   void dispose() {
     _userSub?.cancel();
     _notifSub?.cancel();
+    _heartbeatTimer?.cancel();
     super.dispose();
   }
 }

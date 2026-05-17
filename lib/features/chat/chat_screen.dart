@@ -217,7 +217,7 @@ class _AiChatTile extends StatelessWidget {
   }
 }
 
-class _ChatTile extends StatefulWidget {
+class _ChatTile extends StatelessWidget {
   final ChatModel chat;
   final String currentUid;
 
@@ -226,87 +226,6 @@ class _ChatTile extends StatefulWidget {
   String get _otherUid =>
       chat.participants.firstWhere((p) => p != currentUid, orElse: () => '');
 
-  @override
-  State<_ChatTile> createState() => _ChatTileState();
-}
-
-class _ChatTileState extends State<_ChatTile> {
-  UserModel? _otherUser;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUser();
-  }
-
-  Future<void> _loadUser() async {
-    final uid = widget._otherUid;
-    if (uid.isEmpty) return;
-    final user = await UserRepo().getUser(uid);
-    if (mounted) setState(() => _otherUser = user);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final unread = widget.chat.unreadCount[widget.currentUid] ?? 0;
-    final timeStr = _formatTime(widget.chat.lastMessageAt.toDate());
-    final displayName = _otherUser?.username ?? widget._otherUid;
-    final avatarUrl = _otherUser?.avatarUrl ?? '';
-
-    return ListTile(
-      onTap: () => context.push('/conversation/${widget.chat.chatId}'),
-      leading: CircleAvatar(
-        backgroundColor: kOrange,
-        backgroundImage:
-            avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
-        child: avatarUrl.isEmpty
-            ? Text(
-                displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              )
-            : null,
-      ),
-      title: Text(
-        displayName,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        widget.chat.lastMessage.isEmpty ? 'No messages yet' : widget.chat.lastMessage,
-        style: const TextStyle(color: kMutedFg, fontSize: 12),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(timeStr,
-              style: const TextStyle(color: kMutedFg, fontSize: 11)),
-          if (unread > 0) ...[
-            const SizedBox(height: 4),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: kOrange,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                unread > 99 ? '99+' : '$unread',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
@@ -314,5 +233,99 @@ class _ChatTileState extends State<_ChatTile> {
     if (diff.inHours >= 1) return '${diff.inHours}h';
     if (diff.inMinutes >= 1) return '${diff.inMinutes}m';
     return 'now';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = chat.unreadCount[currentUid] ?? 0;
+    final timeStr = _formatTime(chat.lastMessageAt.toDate());
+    final uid = _otherUid;
+
+    return StreamBuilder<UserModel?>(
+      stream: uid.isNotEmpty ? UserRepo().watchUser(uid) : null,
+      builder: (context, snap) {
+        final other = snap.data;
+        final displayName = other?.username ?? uid;
+        final avatarUrl = other?.avatarUrl ?? '';
+        final isOnline = other?.isReallyOnline ?? false;
+
+        return ListTile(
+          onTap: () => context.push('/conversation/${chat.chatId}'),
+          leading: Stack(
+            children: [
+              CircleAvatar(
+                backgroundColor: kOrange,
+                backgroundImage: avatarUrl.isNotEmpty
+                    ? CachedNetworkImageProvider(avatarUrl)
+                    : null,
+                child: avatarUrl.isEmpty
+                    ? Text(
+                        displayName.isNotEmpty
+                            ? displayName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 16),
+                      )
+                    : null,
+              ),
+              if (isOnline)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF22C55E),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          width: 2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          title: Text(
+            displayName,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            chat.lastMessage.isEmpty ? 'No messages yet' : chat.lastMessage,
+            style: const TextStyle(color: kMutedFg, fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(timeStr,
+                  style: const TextStyle(color: kMutedFg, fontSize: 11)),
+              if (unread > 0) ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: kOrange,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    unread > 99 ? '99+' : '$unread',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 }

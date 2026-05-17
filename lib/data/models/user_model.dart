@@ -17,6 +17,16 @@ class UserModel {
   final bool isPremium;
   final int pinsUsed;
   final int postsCreated;
+  final bool isOnline;
+  final Timestamp? lastSeen;
+
+  /// True only if both the flag is set AND the last heartbeat was within 2 minutes.
+  /// This prevents stale "Online" status when the app is force-killed.
+  bool get isReallyOnline {
+    if (!isOnline) return false;
+    if (lastSeen == null) return true;
+    return DateTime.now().difference(lastSeen!.toDate()).inMinutes < 2;
+  }
 
   UserModel({
     required this.uid,
@@ -35,6 +45,8 @@ class UserModel {
     this.isPremium = false,
     this.pinsUsed = 0,
     this.postsCreated = 0,
+    this.isOnline = false,
+    this.lastSeen,
   })  : preferences = preferences ??
             {'budget': '', 'atmosphere': '', 'favCategories': []},
         joinedAt = joinedAt ?? Timestamp.now();
@@ -58,6 +70,8 @@ class UserModel {
       isPremium: map['isPremium'] ?? false,
       pinsUsed: map['pinsUsed'] ?? 0,
       postsCreated: map['postsCreated'] ?? 0,
+      isOnline: map['isOnline'] ?? false,
+      lastSeen: map['lastSeen'] as Timestamp?,
     );
   }
 
@@ -79,6 +93,8 @@ class UserModel {
       'isPremium': isPremium,
       'pinsUsed': pinsUsed,
       'postsCreated': postsCreated,
+      'isOnline': isOnline,
+      'lastSeen': lastSeen,
     };
   }
 
@@ -99,6 +115,8 @@ class UserModel {
     bool? isPremium,
     int? pinsUsed,
     int? postsCreated,
+    bool? isOnline,
+    Timestamp? lastSeen,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -117,6 +135,8 @@ class UserModel {
       isPremium: isPremium ?? this.isPremium,
       pinsUsed: pinsUsed ?? this.pinsUsed,
       postsCreated: postsCreated ?? this.postsCreated,
+      isOnline: isOnline ?? this.isOnline,
+      lastSeen: lastSeen ?? this.lastSeen,
     );
   }
 }

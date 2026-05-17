@@ -152,25 +152,33 @@ class _NotificationTile extends StatelessWidget {
     }
   }
 
+  void _markRead() {
+    if (notif.read || notif.notifId.isEmpty) return;
+    FirebaseFirestore.instance
+        .collection('notifications')
+        .doc(notif.notifId)
+        .update({'read': true});
+  }
+
+  void _open(BuildContext context) {
+    _markRead();
+    // Message notifications route to the chat; everything else to the post.
+    if ((notif.type == 'message' || notif.type == 'dm') &&
+        notif.chatId != null &&
+        notif.chatId!.isNotEmpty) {
+      context.push('/conversation/${notif.chatId}');
+    } else if (notif.postId != null && notif.postId!.isNotEmpty) {
+      context.push('/post/${notif.postId}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final time = timeago.format(notif.createdAt.toDate(), allowFromNow: true);
 
     return ListTile(
       tileColor: notif.read ? null : kOrange.withValues(alpha: 0.04),
-      onTap: () {
-        // Mark by document ID — avoids full collection scan and
-        // accidental multi-match when two notifications share the same text
-        if (!notif.read && notif.notifId.isNotEmpty) {
-          FirebaseFirestore.instance
-              .collection('notifications')
-              .doc(notif.notifId)
-              .update({'read': true});
-        }
-        if (notif.postId != null && notif.postId!.isNotEmpty) {
-          context.push('/post/${notif.postId}');
-        }
-      },
+      onTap: () => _open(context),
       leading: Container(
         width: 44,
         height: 44,
@@ -201,16 +209,13 @@ class _NotificationTile extends StatelessWidget {
                     const TextStyle(color: kMutedFg, fontSize: 11)),
         ],
       ),
-      trailing: !notif.read
-          ? Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: kOrange,
-                shape: BoxShape.circle,
-              ),
-            )
-          : null,
+      trailing: notif.read
+          ? null
+          : IconButton(
+              tooltip: 'Mark as read',
+              icon: const Icon(Icons.done, size: 18, color: kOrange),
+              onPressed: _markRead,
+            ),
     );
   }
 }

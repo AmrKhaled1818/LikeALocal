@@ -13,9 +13,16 @@ class ChatProvider extends ChangeNotifier {
   StreamSubscription? _chatsSub;
   Map<String, int> _prevUnread = {};
   bool _chatsInitialized = false;
+  String? _currentOpenChatId;
 
   List<ChatModel> get chats => _chats;
   bool get isLoading => _isLoading;
+
+  /// Call from ConversationScreen.initState / dispose to suppress notifications
+  /// for the chat the user is currently reading.
+  void setCurrentChat(String? chatId) {
+    _currentOpenChatId = chatId;
+  }
 
   void startListening(String userId) {
     if (_listeningUid == userId) return;
@@ -39,10 +46,17 @@ class ChatProvider extends ChangeNotifier {
           if (chat.chatId.startsWith('ai_')) continue;
           final prev = _prevUnread[chat.chatId] ?? 0;
           final current = chat.unreadCount[userId] ?? 0;
-          if (current > prev && chat.lastMessage.isNotEmpty) {
+          // Only fire for messages from *other* people — not echoes of our own send.
+          final fromMe = chat.lastSenderId == userId;
+          if (current > prev &&
+              !fromMe &&
+              chat.chatId != _currentOpenChatId) {
+            final name = chat.lastSenderName.isNotEmpty
+                ? chat.lastSenderName
+                : 'Someone';
             NotificationService.showLocalNotification(
               'New message',
-              chat.lastMessage,
+              '$name sent you a message',
             );
           }
           _prevUnread[chat.chatId] = current;

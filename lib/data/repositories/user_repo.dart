@@ -81,6 +81,12 @@ class UserRepo {
     await _db.collection('users').doc(uid).update({'fcmToken': token});
   }
 
+  Future<void> setOnlineStatus(String uid, bool online) async {
+    final data = <String, dynamic>{'isOnline': online};
+    if (!online) data['lastSeen'] = Timestamp.now();
+    await _db.collection('users').doc(uid).update(data);
+  }
+
   Future<void> updateChatEnabled(String uid, bool enabled) async {
     await _db.collection('users').doc(uid).update({'chatEnabled': enabled});
   }

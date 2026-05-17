@@ -1,6 +1,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/utils/toast_utils.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -12,20 +14,18 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static Future<void> initialize() async {
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    await _local.initialize(
-      const InitializationSettings(android: androidSettings),
-    );
-
-    await _setupChannel();
-
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showLocalNotification(message);
-    });
+    if (!kIsWeb) {
+      const AndroidInitializationSettings androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      await _local.initialize(
+        const InitializationSettings(android: androidSettings),
+      );
+      await _setupChannel();
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        _showLocalNotification(message);
+      });
+    }
   }
 
   static Future<void> _setupChannel() async {
@@ -70,21 +70,12 @@ class NotificationService {
     );
   }
 
+  /// Foreground notification — always rendered as an in-app Toastification
+  /// banner, regardless of platform. OS-level notifications are reserved for
+  /// background pushes via FCM (`_showLocalNotification`).
   static Future<void> showLocalNotification(
       String title, String body) async {
-    await _local.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      title,
-      body,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'like_a_local_channel',
-          'LikeALocal Notifications',
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      ),
-    );
+    AppToast.notification(title, body);
   }
 
   static Future<void> createNotificationDoc({
