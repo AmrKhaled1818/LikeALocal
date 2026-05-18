@@ -38,10 +38,10 @@ class VisionResult {
 /// Never throws — returns an empty [VisionResult] on failure so callers can
 /// silently fall back to manual entry without breaking post creation.
 class VisionService {
-  /// Per-attempt timeout. The free OpenRouter vision queue can sit on a
-  /// request for 30–50s under load; 60s gives the slowest happy-path enough
-  /// headroom without making a broken request feel infinite.
-  static const _attemptTimeout = Duration(seconds: 60);
+  /// Per-attempt timeout. Using a reasoning model (Nemotron Omni) takes time
+  /// (usually around 50s), so we need a generous timeout to ensure it doesn't
+  /// get cut off prematurely.
+  static const _attemptTimeout = Duration(seconds: 90);
 
   /// Generates a short description for [imageFile].
   ///
@@ -62,39 +62,28 @@ class VisionService {
     if (!AppConfig.hasVisionKey) {
       return const VisionResult(
         description: '',
-        errorMessage: 'OPENROUTER_API_KEY is not set',
+        errorMessage: 'GEMINI_API_KEY is not set',
       );
     }
 
     final bytes = await imageFile.readAsBytes();
     final base64Image = base64Encode(bytes);
     final mimeType = _detectMimeType(imageFile);
-    final dataUri = 'data:$mimeType;base64,$base64Image';
     final prompt = _buildPrompt(
         placeName: placeName.trim(), caption: caption.trim());
 
-    // Attempt sequence: primary → fallback → primary-retry.
-    // Primary first because it's the fastest happy path. Fallback covers
-    // primary-model-specific outages. Primary-retry catches transient queue
-    // blips after the fallback also failed (often the queue clears in
-    // seconds).
-    final primary = AppConfig.openRouterVisionModel;
-    final fallback = AppConfig.openRouterVisionFallbackModel;
-    final models = <String>[
-      primary,
-      if (fallback.isNotEmpty && fallback != primary) fallback,
-      if (fallback.isNotEmpty && fallback != primary) primary,
-    ];
+    final model = AppConfig.geminiVisionModel;
 
+    // We try the Gemini model up to 2 times to handle transient network issues.
     var sawTransient = false;
     String? lastError;
 
-    for (var i = 0; i < models.length; i++) {
-      final model = models[i];
+    for (var i = 0; i < 2; i++) {
       final attempt = await _callOnce(
         model: model,
         prompt: prompt,
-        dataUri: dataUri,
+        base64Image: base64Image,
+        mimeType: mimeType,
       );
 
       if (attempt.isSuccess) return attempt;
@@ -107,13 +96,12 @@ class VisionService {
         lastError = attempt.errorMessage;
       } else {
         lastError = attempt.errorMessage;
+        // Don't retry on hard errors (like bad API key)
+        break;
       }
 
-      // Small backoff before trying the next model so we don't hammer a
-      // shared free-tier queue.
-      if (i < models.length - 1) {
-        await Future.delayed(const Duration(seconds: 1));
-      }
+      // Small backoff before retry
+      if (i == 0) await Future.delayed(const Duration(seconds: 1));
     }
 
     return VisionResult(
@@ -129,38 +117,36 @@ class VisionService {
   static Future<VisionResult> _callOnce({
     required String model,
     required String prompt,
-    required String dataUri,
+    required String base64Image,
+    required String mimeType,
   }) async {
     try {
+      final apiKey = AppConfig.geminiApiKey;
       final response = await http
           .post(
-            Uri.parse('${AppConfig.openRouterBaseUrl}/chat/completions'),
+            Uri.parse(
+                'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey'),
             headers: {
-              'Authorization': 'Bearer ${AppConfig.openRouterApiKey}',
               'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://likealocal.app',
-              'X-Title': 'LikeALocal',
             },
             body: jsonEncode({
-              'model': model,
-              'messages': [
+              'contents': [
                 {
-                  'role': 'user',
-                  'content': [
-                    {'type': 'text', 'text': prompt},
+                  'parts': [
+                    {'text': prompt},
                     {
-                      'type': 'image_url',
-                      'image_url': {'url': dataUri},
-                    },
-                  ],
-                },
+                      'inline_data': {
+                        'mime_type': mimeType,
+                        'data': base64Image,
+                      }
+                    }
+                  ]
+                }
               ],
-              // 500 leaves enough headroom for the reasoning fallback model
-              // (which eats ~250 tokens on internal reasoning before
-              // producing content). Non-reasoning models naturally stop
-              // well below this cap, so it doesn't bloat normal output.
-              'max_tokens': 500,
-              'temperature': 0.7,
+              'generationConfig': {
+                'temperature': 0.7,
+                'maxOutputTokens': 600,
+              }
             }),
           )
           .timeout(_attemptTimeout);
@@ -183,51 +169,41 @@ class VisionService {
         );
       }
       if (response.statusCode != 200) {
-        // OpenRouter wraps upstream provider outages as 4xx with the body
-        // `{"error":{"message":"Provider returned error",...}}`. That's a
-        // transient infra issue (Nvidia NIM, Google AI Studio, etc.), not
-        // a malformed request — treat it as overloaded so we retry the
-        // chain and show the friendly toast.
         final body = response.body;
-        final isUpstreamOutage = body.contains('Provider returned error');
         debugPrint('VisionService HTTP ${response.statusCode} on $model: '
             '${body.length > 200 ? '${body.substring(0, 200)}...' : body}');
         return VisionResult(
           description: '',
-          overloaded: isUpstreamOutage,
+          overloaded: false,
           errorMessage: 'HTTP ${response.statusCode}: $body',
         );
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final choices = data['choices'] as List?;
-      if (choices == null || choices.isEmpty) {
-        // Observed in the wild: the primary sometimes 200s with an empty
-        // body after sitting on the queue for ~10s. Treat as transient so
-        // the fallback gets a turn and the UI shows the friendlier
-        // "AI is busy" message instead of a generic failure.
+      final candidates = data['candidates'] as List?;
+      if (candidates == null || candidates.isEmpty) {
         return const VisionResult(
           description: '',
           overloaded: true,
-          errorMessage: 'no choices in response',
+          errorMessage: 'no candidates in response',
         );
       }
-      final message = (choices.first as Map)['message'] as Map?;
-      final raw = message?['content'];
-      final text = raw is String
-          ? raw.trim()
-          : (raw is List
-              ? raw
-                  .whereType<Map>()
-                  .map((p) => (p['text'] ?? '').toString())
-                  .join(' ')
-                  .trim()
-              : '');
+      
+      final contentMap = candidates.first['content'] as Map?;
+      final parts = contentMap?['parts'] as List?;
+      if (parts == null || parts.isEmpty) {
+        return const VisionResult(
+          description: '',
+          overloaded: true,
+          errorMessage: 'no parts in response',
+        );
+      }
+
+      final raw = parts.first['text'];
+      final text = raw is String ? raw.trim() : '';
 
       final cleaned = _cleanup(text);
       if (cleaned.isEmpty) {
-        // Empty body from the model is treated as transient — the fallback
-        // model often succeeds where the primary returned nothing.
         return const VisionResult(
           description: '',
           overloaded: true,

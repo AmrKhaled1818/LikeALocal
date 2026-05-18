@@ -82,8 +82,12 @@ class UserRepo {
   }
 
   Future<void> setOnlineStatus(String uid, bool online) async {
-    final data = <String, dynamic>{'isOnline': online};
-    if (!online) data['lastSeen'] = Timestamp.now();
+    final data = <String, dynamic>{
+      'isOnline': online,
+      // Always stamp lastSeen so isReallyOnline sees a fresh timestamp
+      // immediately — not after the next 60s heartbeat.
+      'lastSeen': Timestamp.now(),
+    };
     await _db.collection('users').doc(uid).update(data);
   }
 

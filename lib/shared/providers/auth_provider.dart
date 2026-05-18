@@ -51,9 +51,10 @@ class AuthProvider extends ChangeNotifier {
         await _userRepo.setOnlineStatus(user.uid, true);
       } catch (_) {}
 
-      // Heartbeat: update lastSeen every 60s so isReallyOnline stays accurate
-      // even if the app is force-killed (lastSeen goes stale → shows offline after 2 min)
-      _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      // Heartbeat: update lastSeen every 45s so isReallyOnline stays accurate
+      // even if the app is force-killed (lastSeen goes stale → shows offline after 2 min).
+      // setOnlineStatus already stamps lastSeen on the initial call above.
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 45), (_) {
         if (_firebaseUser != null) {
           _userRepo.updateUser(_firebaseUser!.uid, {'lastSeen': Timestamp.now()}).catchError((_) {});
         }
@@ -190,6 +191,15 @@ class AuthProvider extends ChangeNotifier {
     final uid = _firebaseUser?.uid;
     if (uid == null) return;
     try { await _userRepo.setOnlineStatus(uid, online); } catch (_) {}
+  }
+
+  /// Immediately writes a fresh `lastSeen` so `isReallyOnline` returns true
+  /// right away (e.g. on app resume). The periodic heartbeat handles ongoing
+  /// freshness after this.
+  void heartbeatNow() {
+    final uid = _firebaseUser?.uid;
+    if (uid == null) return;
+    _userRepo.updateUser(uid, {'lastSeen': Timestamp.now()}).catchError((_) {});
   }
 
   Future<bool> deleteAccount() async {

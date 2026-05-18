@@ -220,6 +220,9 @@ class _AppRouterState extends State<_AppRouter> with WidgetsBindingObserver {
     final auth = context.read<AuthProvider>();
     if (state == AppLifecycleState.resumed) {
       auth.setOnline(true);
+      // Fire an immediate heartbeat so the other user sees "Online" right away
+      // instead of waiting up to 45s for the next periodic tick.
+      auth.heartbeatNow();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       auth.setOnline(false);

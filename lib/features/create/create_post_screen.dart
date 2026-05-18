@@ -116,7 +116,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         setState(() => _descAiGenerated = true);
       } else if (result.overloaded || result.rateLimited) {
         AppToast.warning(
-            'AI is busy right now — try again in a moment, or write it manually.');
+            'AI is busy right now. Debug: ${result.errorMessage}');
       } else {
         AppToast.info('Could not generate description. Try again later.');
       }
