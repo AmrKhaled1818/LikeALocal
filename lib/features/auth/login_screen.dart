@@ -460,8 +460,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!success && auth.errorMessage != null) {
       AppToast.error(auth.errorMessage!);
     } else if (success) {
-      final prefs = await SharedPreferences.getInstance();
-      if (!(prefs.getBool('onboarding_seen') ?? false)) {
+      // Sign-up → always show onboarding. Login → straight to feed.
+      if (!_isLogin) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('onboarding_seen', false);
         if (context.mounted) context.go('/onboarding');
       } else {
         if (context.mounted) context.go('/feed');
@@ -475,8 +477,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!success && auth.errorMessage != null) {
       AppToast.error(auth.errorMessage!);
     } else if (success) {
-      final prefs = await SharedPreferences.getInstance();
-      if (!(prefs.getBool('onboarding_seen') ?? false)) {
+      // New Google account → onboarding. Existing account → feed.
+      if (auth.lastSignInWasNewUser) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('onboarding_seen', false);
         if (context.mounted) context.go('/onboarding');
       } else {
         if (context.mounted) context.go('/feed');

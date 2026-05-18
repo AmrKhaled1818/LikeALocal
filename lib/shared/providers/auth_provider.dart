@@ -156,10 +156,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  bool _lastSignInWasNewUser = false;
+  bool get lastSignInWasNewUser => _lastSignInWasNewUser;
+
   Future<bool> signInWithGoogle() async {
     _setLoading(true);
     try {
-      await _authRepo.signInWithGoogle();
+      final result = await _authRepo.signInWithGoogle();
+      _lastSignInWasNewUser = result.isNewUser;
       _clearError();
       return true;
     } on FirebaseAuthException catch (e) {

@@ -28,7 +28,7 @@ class AuthRepo {
     await _createUserDoc(cred.user!, username);
   }
 
-  Future<UserCredential> signInWithGoogle() async {
+  Future<({UserCredential cred, bool isNewUser})> signInWithGoogle() async {
     if (kIsWeb) {
       // On web, use Firebase Auth popup — no clientId needed
       final provider = GoogleAuthProvider();
@@ -36,11 +36,12 @@ class AuthRepo {
       provider.addScope('profile');
       final cred = await _auth.signInWithPopup(provider);
       final doc = await _db.collection('users').doc(cred.user!.uid).get();
-      if (!doc.exists) {
+      final isNewUser = !doc.exists;
+      if (isNewUser) {
         await _createUserDoc(
             cred.user!, cred.user!.displayName ?? cred.user!.email?.split('@')[0] ?? 'User');
       }
-      return cred;
+      return (cred: cred, isNewUser: isNewUser);
     }
 
     // Mobile flow — uses google_sign_in package
@@ -55,11 +56,12 @@ class AuthRepo {
     );
     final cred = await _auth.signInWithCredential(credential);
     final doc = await _db.collection('users').doc(cred.user!.uid).get();
-    if (!doc.exists) {
+    final isNewUser = !doc.exists;
+    if (isNewUser) {
       await _createUserDoc(
           cred.user!, googleUser.displayName ?? googleUser.email.split('@')[0]);
     }
-    return cred;
+    return (cred: cred, isNewUser: isNewUser);
   }
 
   Future<void> signOut() async {

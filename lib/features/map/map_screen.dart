@@ -556,11 +556,12 @@ class _MapScreenState extends State<MapScreen>
                               context.push('/post/${post.postId}');
                             },
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: kDark,
+                              foregroundColor: kOrange,
                               side: const BorderSide(color: kOrange),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10),
-                              textStyle: const TextStyle(fontSize: 11),
+                              textStyle: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                             child: const Text('Post'),
                           ),
