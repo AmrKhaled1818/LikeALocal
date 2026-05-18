@@ -5,7 +5,7 @@ import '../../core/utils/vibe_score.dart';
 const _moodIcons = <String, IconData>{
   '': Icons.auto_awesome_outlined,
   'chill': Icons.spa_outlined,
-  'adventurous': Icons.hiking_outlined,
+  'cafe': Icons.local_cafe_outlined,
   'hungry': Icons.restaurant_outlined,
   'cultural': Icons.palette_outlined,
 };

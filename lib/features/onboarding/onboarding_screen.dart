@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/utils/vibe_score.dart';
 import '../../shared/providers/auth_provider.dart';
+import '../../shared/providers/posts_provider.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -50,6 +51,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_selectedMood.isNotEmpty) {
       await prefs.setString('home_mood', _selectedMood);
     }
+    if (!mounted) return;
+    // PostsProvider was constructed at app start and already finished its
+    // initial _loadMood (which read an empty mood). Push the user's pick
+    // straight into the provider so the feed reflects it immediately
+    // without waiting for the next app launch.
+    final posts = context.read<PostsProvider>();
+    await posts.setMood(_selectedMood);
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     context.go(auth.isLoggedIn ? '/feed' : '/login');
@@ -167,8 +175,8 @@ class _MoodPickSlide extends StatelessWidget {
   static const _moods = <(String, IconData, String, Color)>[
     ('chill', Icons.spa_outlined, 'Easygoing — cafés, parks, viewpoints',
         Color(0xFF0EA5E9)),
-    ('adventurous', Icons.hiking_outlined,
-        'Out exploring — rooftops, trails, nightlife', Color(0xFFE8580A)),
+    ('cafe', Icons.local_cafe_outlined,
+        'Coffee & pastries — slow mornings, cozy spots', Color(0xFFE8580A)),
     ('hungry', Icons.restaurant_outlined,
         'On the hunt for food — restaurants & eats', Color(0xFFD4820A)),
     ('cultural', Icons.palette_outlined,

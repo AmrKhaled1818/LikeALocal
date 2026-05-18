@@ -2,28 +2,31 @@ import '../../data/models/post_model.dart';
 
 /// Moods the home feed can be tuned to. Used by onboarding, the top bar, and
 /// [PostsProvider]'s ranking.
-const kMoods = <String>['chill', 'adventurous', 'hungry', 'cultural'];
+const kMoods = <String>['chill', 'cafe', 'hungry', 'cultural'];
 
 const kMoodLabels = <String, String>{
   '': 'Any vibe',
   'chill': 'Chill',
-  'adventurous': 'Adventurous',
+  'cafe': 'Café',
   'hungry': 'Hungry',
   'cultural': 'Cultural',
 };
 
-/// Categories a given mood favours (lower-cased on use).
+/// Categories a given mood favours (lower-cased on use). When a mood is
+/// active, [PostsProvider.rankedFeed] also filters the feed down to these
+/// categories — picking a mood is a hard "show me only this" gesture.
 const kMoodCategories = <String, List<String>>{
   'chill': ['Café', 'Park', 'Viewpoint'],
-  'adventurous': ['Viewpoint', 'Park'],
+  'cafe': ['Café'],
   'hungry': ['Restaurant', 'Café'],
   'cultural': ['Cultural'],
 };
 
 const _moodKeywords = <String, List<String>>{
   'chill': ['cozy', 'quiet', 'calm', 'relax', 'peaceful', 'chill', 'serene'],
-  'adventurous': [
-    'hike', 'view', 'adventure', 'rooftop', 'hidden', 'explore', 'outdoor', 'trail'
+  'cafe': [
+    'coffee', 'café', 'cafe', 'espresso', 'latte', 'cappuccino',
+    'pastry', 'brunch', 'breakfast', 'wifi', 'cozy', 'reading'
   ],
   'hungry': [
     'food', 'dish', 'eat', 'tasty', 'delicious', 'meal', 'cuisine', 'brunch', 'dinner'

@@ -101,7 +101,11 @@ class PostsProvider extends ChangeNotifier {
 
   /// Feed ordered for display.
   ///
-  /// Ranking rules (applied in order):
+  /// Pipeline (applied in order):
+  ///   0. If a mood is selected, FILTER posts down to its allowed categories
+  ///      (`kMoodCategories`). Picking "cultural" hides cafés, picking "café"
+  ///      hides parks, etc. Safety net: if the filter would empty the feed,
+  ///      we fall back to the full list rather than show a blank screen.
   ///   1. If `showSuperUsersFirst` is on, Super User posts are grouped at top.
   ///   2. Within each group, if a mood is selected OR the user has meaningful
   ///      preferences, posts are sorted by Vibe Match score (high → low).
@@ -110,9 +114,22 @@ class PostsProvider extends ChangeNotifier {
   /// Scores are computed once per call and cached locally in a Map so the
   /// sort comparator doesn't recompute them O(n log n) times.
   List<PostModel> rankedFeed([Map<String, dynamic>? prefs]) {
-    final ranked = List<PostModel>.from(_feedPosts);
-
     final hasMood = _mood.isNotEmpty;
+
+    // 0. Mood category filter.
+    List<PostModel> source = _feedPosts;
+    if (hasMood) {
+      final allowed = kMoodCategories[_mood] ?? const <String>[];
+      if (allowed.isNotEmpty) {
+        final filtered = _feedPosts
+            .where((p) => allowed.any((c) => _categoryMatches(c, p.category)))
+            .toList();
+        if (filtered.isNotEmpty) source = filtered;
+      }
+    }
+
+    final ranked = List<PostModel>.from(source);
+
     final hasPrefs = prefs != null && _hasMeaningfulPrefs(prefs);
     final useVibeRanking = hasMood || hasPrefs;
 
@@ -148,6 +165,16 @@ class PostsProvider extends ChangeNotifier {
     final atm = (prefs['atmosphere'] ?? '').toString();
     final budget = (prefs['budget'] ?? '').toString();
     return cats.isNotEmpty || atm.isNotEmpty || budget.isNotEmpty;
+  }
+
+  /// Case-insensitive category match that treats "café" and "cafe" as the
+  /// same — kept here so the mood filter doesn't depend on VibeScore's
+  /// private helper.
+  static bool _categoryMatches(String a, String b) {
+    final x = a.toLowerCase();
+    final y = b.toLowerCase();
+    if (x == y) return true;
+    return (x == 'café' && y == 'cafe') || (x == 'cafe' && y == 'café');
   }
 
   Future<void> _loadFirstPage() async {
