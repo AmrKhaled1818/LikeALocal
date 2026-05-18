@@ -326,15 +326,18 @@ class _EditPostScreenState extends State<EditPostScreen> {
                   hintText: 'Any insider knowledge?',
                 ),
               ),
-              const SizedBox(height: 14),
 
-              _label('Recommended Dishes (optional)'),
-              TextFormField(
-                controller: _dishesCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'E.g. Tacos, Pad Thai (comma-separated)',
+              if (_selectedCategory == 'Restaurant' ||
+                  _selectedCategory == 'Café') ...[
+                const SizedBox(height: 14),
+                _label('Recommended Dishes (optional)'),
+                TextFormField(
+                  controller: _dishesCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'E.g. Tacos, Pad Thai (comma-separated)',
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 80),
             ],
           ),
@@ -523,11 +526,15 @@ class _EditPostScreenState extends State<EditPostScreen> {
     setState(() => _saving = true);
 
     try {
-      final dishes = _dishesCtrl.text
-          .split(',')
-          .map((d) => d.trim())
-          .where((d) => d.isNotEmpty)
-          .toList();
+      final isFoodPlace =
+          _selectedCategory == 'Restaurant' || _selectedCategory == 'Café';
+      final dishes = isFoodPlace
+          ? _dishesCtrl.text
+              .split(',')
+              .map((d) => d.trim())
+              .where((d) => d.isNotEmpty)
+              .toList()
+          : <String>[];
 
       final updated = widget.post.copyWith(
         title: _titleCtrl.text.trim(),

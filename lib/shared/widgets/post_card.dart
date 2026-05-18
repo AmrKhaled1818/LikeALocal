@@ -192,62 +192,78 @@ class _PostCardState extends State<PostCard>
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: kOrange,
-                        backgroundImage: avatarUrl.isNotEmpty
-                            ? CachedNetworkImageProvider(avatarUrl)
-                            : null,
-                        child: avatarUrl.isEmpty
-                            ? Text(
-                                post.username.substring(0, 1).toUpperCase(),
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 13),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    post.username,
-                                    style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () =>
+                              context.push('/user/${post.userId}'),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: kOrange,
+                                backgroundImage: avatarUrl.isNotEmpty
+                                    ? CachedNetworkImageProvider(avatarUrl)
+                                    : null,
+                                child: avatarUrl.isEmpty
+                                    ? Text(
+                                        post.username
+                                            .substring(0, 1)
+                                            .toUpperCase(),
+                                        style: const TextStyle(
+                                            color: Colors.white, fontSize: 13),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            post.username,
+                                            style: TextStyle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                        if (post.isSuperUser) ...[
+                                          const SizedBox(width: 6),
+                                          const SuperUserBadge(),
+                                        ],
+                                      ],
+                                    ),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                            Icons.location_on_outlined,
+                                            size: 12,
+                                            color: kMutedFg),
+                                        const SizedBox(width: 2),
+                                        Expanded(
+                                          child: Text(
+                                            '${post.location} · ${timeago.format(createdAt)}',
+                                            style: const TextStyle(
+                                                color: kMutedFg, fontSize: 11),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                if (post.isSuperUser) ...[
-                                  const SizedBox(width: 6),
-                                  const SuperUserBadge(),
-                                ],
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on_outlined,
-                                    size: 12, color: kMutedFg),
-                                const SizedBox(width: 2),
-                                Expanded(
-                                  child: Text(
-                                    '${post.location} · ${timeago.format(createdAt)}',
-                                    style: const TextStyle(
-                                        color: kMutedFg, fontSize: 11),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       if (post.isSponsoredContent)

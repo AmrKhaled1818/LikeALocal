@@ -14,7 +14,7 @@ import '../../core/utils/responsive.dart';
 import '../../core/utils/toast_utils.dart';
 import '../../core/utils/validators.dart';
 import '../../data/models/post_model.dart';
-import '../../data/services/ai_service.dart';
+import '../../data/services/vision_service.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import '../../shared/widgets/paywall_sheet.dart';
@@ -43,7 +43,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   String _selectedCategory = 'Restaurant';
   bool _posting = false;
   bool _checkingLimit = true;
-  bool _generatingCaption = false;
+  bool _descGenerating = false;
+  bool _descAiGenerated = false;
   int _todayPostCount = 0;
   double? _pickedLat;
   double? _pickedLng;
@@ -87,28 +88,42 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
-  Future<void> _generateCaption() async {
-    final category = _selectedCategory;
-    final location = _locationCtrl.text.trim();
-    final desc = _descCtrl.text.trim();
-    setState(() => _generatingCaption = true);
+  /// Runs the OpenRouter vision model on the first selected image, folding
+  /// in the place name (location) and the caption so the model has full
+  /// context. Always user-triggered — never auto-fired. Silent fail so post
+  /// creation continues to work without AI.
+  Future<void> _generateDescriptionFromImage() async {
+    if (_selectedImages.isEmpty) {
+      AppToast.info('Add a photo first.');
+      return;
+    }
+    if (_descGenerating) return;
+
+    setState(() => _descGenerating = true);
     try {
-      final result = await AIService().generatePostSummary(
-        title: location.isNotEmpty ? location : category,
-        category: category,
-        description: desc.isNotEmpty ? desc : 'A hidden gem worth visiting.',
-        localTips: _tipsCtrl.text.trim(),
+      final result = await VisionService.generateImageDescription(
+        _selectedImages.first,
+        placeName: _locationCtrl.text.trim(),
+        caption: _titleCtrl.text.trim(),
       );
-      if (result.isNotEmpty && mounted) {
-        _titleCtrl.text = result.length > 500 ? '${result.substring(0, 497)}...' : result;
-        AppToast.success('Caption generated!');
-      } else if (mounted) {
-        AppToast.error('Could not generate caption. Try again.');
+      if (!mounted) return;
+
+      if (result.isSuccess) {
+        _descCtrl.text = result.description;
+        _descCtrl.selection = TextSelection.collapsed(
+          offset: _descCtrl.text.length,
+        );
+        setState(() => _descAiGenerated = true);
+      } else if (result.rateLimited) {
+        AppToast.warning(
+            'AI description unavailable, please write it manually.');
+      } else {
+        AppToast.info('Could not generate description. Try again later.');
       }
     } catch (_) {
-      if (mounted) AppToast.error('Generation failed. Check your connection.');
+      // Silent fail — post creation must never be blocked by AI.
     } finally {
-      if (mounted) setState(() => _generatingCaption = false);
+      if (mounted) setState(() => _descGenerating = false);
     }
   }
 
@@ -214,35 +229,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   );
                 },
               ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _generatingCaption ? null : _generateCaption,
-                  icon: _generatingCaption
-                      ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Color(0xFF8B5CF6)))
-                      : const Icon(Icons.auto_awesome,
-                          size: 14, color: Color(0xFF8B5CF6)),
-                  label: Text(
-                    _generatingCaption ? 'Generating...' : 'AI Generate Caption',
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF8B5CF6)),
-                  ),
-                ),
-              ),
               const SizedBox(height: 14),
 
-              _label('Description'),
-              TextFormField(
-                controller: _descCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Tell us more about this place...',
-                ),
-              ),
+              _buildDescriptionField(),
               const SizedBox(height: 14),
 
               // Location
@@ -417,16 +406,18 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   hintText: 'Any insider knowledge?',
                 ),
               ),
-              const SizedBox(height: 14),
-
-              // Recommended Dishes (optional)
-              _label('Recommended Dishes (optional)'),
-              TextFormField(
-                controller: _dishesCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'E.g. Tacos, Pad Thai (comma-separated)',
+              // Recommended Dishes (only meaningful for food places)
+              if (_selectedCategory == 'Restaurant' ||
+                  _selectedCategory == 'Café') ...[
+                const SizedBox(height: 14),
+                _label('Recommended Dishes (optional)'),
+                TextFormField(
+                  controller: _dishesCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'E.g. Tacos, Pad Thai (comma-separated)',
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 80),
             ],
           ),
@@ -460,6 +451,154 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         style: const TextStyle(
             fontWeight: FontWeight.w600, fontSize: 14),
       ),
+    );
+  }
+
+  Widget _buildDescriptionField() {
+    const aiPurple = Color(0xFF8B5CF6);
+    final canGenerate =
+        _selectedImages.isNotEmpty && !_descGenerating && !_posting;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Description',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            if (_descAiGenerated && !_descGenerating) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: aiPurple.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border:
+                      Border.all(color: aiPurple.withValues(alpha: 0.35)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome, size: 11, color: aiPurple),
+                    SizedBox(width: 4),
+                    Text(
+                      'AI Description',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: aiPurple,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Stack(
+          children: [
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: _descGenerating ? 0.45 : 1.0,
+              child: TextFormField(
+                controller: _descCtrl,
+                maxLines: 3,
+                enabled: !_descGenerating,
+                onChanged: (_) {
+                  if (_descAiGenerated) {
+                    setState(() => _descAiGenerated = false);
+                  }
+                },
+                decoration: InputDecoration(
+                  hintText: _descGenerating
+                      ? 'Analyzing image...'
+                      : 'Tell us more about this place...',
+                ),
+              ),
+            ),
+            if (_descGenerating)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: aiPurple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: aiPurple.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: aiPurple),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Analyzing image...',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: aiPurple,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: canGenerate ? _generateDescriptionFromImage : null,
+            icon: _descGenerating
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: aiPurple),
+                  )
+                : const Icon(Icons.auto_awesome, size: 14, color: aiPurple),
+            label: Text(
+              _descGenerating
+                  ? 'Analyzing image...'
+                  : _descAiGenerated
+                      ? 'Regenerate AI description'
+                      : 'Generate AI description',
+              style: const TextStyle(
+                  color: aiPurple, fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: aiPurple.withValues(alpha: 0.4)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+        if (_selectedImages.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Add a photo first to use AI description.',
+              style: TextStyle(color: kMutedFg, fontSize: 11),
+            ),
+          ),
+      ],
     );
   }
 
@@ -800,11 +939,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     setState(() => _posting = true);
     try {
       final auth = context.read<AuthProvider>();
-      final dishes = _dishesCtrl.text
-          .split(',')
-          .map((d) => d.trim())
-          .where((d) => d.isNotEmpty)
-          .toList();
+      // Dishes only apply to food categories — drop them otherwise so a
+      // stray value left over from switching categories doesn't get saved.
+      final isFoodPlace =
+          _selectedCategory == 'Restaurant' || _selectedCategory == 'Café';
+      final dishes = isFoodPlace
+          ? _dishesCtrl.text
+              .split(',')
+              .map((d) => d.trim())
+              .where((d) => d.isNotEmpty)
+              .toList()
+          : <String>[];
 
       final post = PostModel(
         postId: '',

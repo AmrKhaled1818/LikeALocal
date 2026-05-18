@@ -89,7 +89,11 @@ class ChatRepo {
           List<String>.from(chatDoc.data()!['participants'] ?? []);
       recipientId =
           participants.firstWhere((p) => p != senderId, orElse: () => '');
-      final lastMsg = message.type == 'image' ? '📷 Photo' : message.text;
+      final lastMsg = message.type == 'image'
+          ? '📷 Photo'
+          : message.type == 'video'
+              ? '🎥 Video'
+              : message.text;
       Map<String, dynamic> update = {
         'lastMessage': lastMsg,
         'lastMessageAt': Timestamp.now(),
@@ -110,7 +114,9 @@ class ChatRepo {
       try {
         final body = message.type == 'image'
             ? '$senderName sent you a photo'
-            : '$senderName sent you a message';
+            : message.type == 'video'
+                ? '$senderName sent you a video'
+                : '$senderName sent you a message';
         final notifRef = _db.collection('notifications').doc();
         await notifRef.set({
           'notifId': notifRef.id,

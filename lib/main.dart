@@ -174,6 +174,11 @@ class _AppRouterState extends State<_AppRouter> with WidgetsBindingObserver {
           builder: (_, __) => const ProfileScreen(),
         ),
         GoRoute(
+          path: '/user/:uid',
+          builder: (_, state) =>
+              ProfileScreen(userId: state.pathParameters['uid']),
+        ),
+        GoRoute(
           path: '/notifications',
           builder: (_, __) => const NotificationsScreen(),
         ),

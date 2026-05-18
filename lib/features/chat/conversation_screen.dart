@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_utils.dart';
 import '../../core/utils/responsive.dart';
@@ -36,6 +37,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final _scrollCtrl = ScrollController();
   bool _sending = false;
   bool _sendingImage = false;
+  bool _sendingVideo = false;
   Position? _position;
   String? _otherUsername;
   String? _otherUid;
@@ -202,6 +204,39 @@ class _ConversationScreenState extends State<ConversationScreen> {
       if (mounted) AppToast.error('Failed to send image. Try again.');
     } finally {
       if (mounted) setState(() => _sendingImage = false);
+    }
+  }
+
+  Future<void> _sendVideoMessage() async {
+    if (_sendingVideo) return;
+    final picker = ImagePicker();
+    final file = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 2),
+    );
+    if (file == null || !mounted) return;
+
+    final chatProvider = context.read<ChatProvider>();
+    final auth = context.read<AuthProvider>();
+
+    setState(() => _sendingVideo = true);
+    try {
+      final result = await CloudinaryService().uploadVideo(file);
+      if (!mounted) return;
+      final msg = MessageModel(
+        msgId: '',
+        senderId: auth.uid,
+        text: '',
+        type: 'video',
+        videoUrl: result.imageUrl,
+        createdAt: Timestamp.now(),
+      );
+      await chatProvider.sendMessage(widget.chatId, msg, auth.uid);
+      _scrollToBottom();
+    } catch (_) {
+      if (mounted) AppToast.error('Failed to send video. Try again.');
+    } finally {
+      if (mounted) setState(() => _sendingVideo = false);
     }
   }
 
@@ -750,7 +785,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (!_isAiChat)
+                  if (!_isAiChat) ...[
                     _sendingImage
                         ? const Padding(
                             padding: EdgeInsets.only(right: 4),
@@ -776,6 +811,32 @@ class _ConversationScreenState extends State<ConversationScreen> {
                             constraints: const BoxConstraints(
                                 minWidth: 36, minHeight: 36),
                           ),
+                    _sendingVideo
+                        ? const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: SizedBox(
+                              width: 36,
+                              height: 36,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: kOrange, strokeWidth: 2),
+                                ),
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.videocam_outlined,
+                                color: kMutedFg),
+                            tooltip: 'Send video',
+                            onPressed: _sendVideoMessage,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 36, minHeight: 36),
+                          ),
+                  ],
                   Expanded(
                     child: Container(
                       constraints: const BoxConstraints(maxHeight: 120),
@@ -1210,7 +1271,18 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           ),
                         )
-                      : Container(
+                      : message.type == 'video' && message.videoUrl.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(16),
+                                topRight: const Radius.circular(16),
+                                bottomLeft: Radius.circular(isMe ? 16 : 4),
+                                bottomRight: Radius.circular(isMe ? 4 : 16),
+                              ),
+                              child: _VideoMessageBubble(
+                                  videoUrl: message.videoUrl),
+                            )
+                          : Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 10),
                           constraints: BoxConstraints(
@@ -1288,6 +1360,130 @@ class _MessageBubble extends StatelessWidget {
           ),
           if (isMe) const SizedBox(width: 6),
         ],
+      ),
+    );
+  }
+}
+
+/// Inline video bubble — lazily initializes a [VideoPlayerController] when
+/// built, disposes on unmount, and shows a tap-to-play / pause overlay.
+class _VideoMessageBubble extends StatefulWidget {
+  final String videoUrl;
+  const _VideoMessageBubble({required this.videoUrl});
+
+  @override
+  State<_VideoMessageBubble> createState() => _VideoMessageBubbleState();
+}
+
+class _VideoMessageBubbleState extends State<_VideoMessageBubble> {
+  VideoPlayerController? _ctrl;
+  bool _initialized = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      await _ctrl!.initialize();
+      _ctrl!.addListener(_onTick);
+      if (mounted) setState(() => _initialized = true);
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+    }
+  }
+
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.removeListener(_onTick);
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    final c = _ctrl;
+    if (c == null || !c.value.isInitialized) return;
+    if (c.value.isPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasError) {
+      return Container(
+        width: 220,
+        height: 160,
+        color: Colors.black87,
+        alignment: Alignment.center,
+        child: const Icon(Icons.error_outline, color: Colors.white70),
+      );
+    }
+    if (!_initialized || _ctrl == null) {
+      return Container(
+        width: 220,
+        height: 160,
+        color: Colors.black87,
+        alignment: Alignment.center,
+        child: const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
+        ),
+      );
+    }
+
+    final ctrl = _ctrl!;
+    return GestureDetector(
+      onTap: _togglePlay,
+      child: SizedBox(
+        width: 220,
+        child: AspectRatio(
+          aspectRatio: ctrl.value.aspectRatio == 0
+              ? 16 / 9
+              : ctrl.value.aspectRatio,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              VideoPlayer(ctrl),
+              AnimatedOpacity(
+                opacity: ctrl.value.isPlaying ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  decoration: const BoxDecoration(
+                      color: Colors.black38, shape: BoxShape.circle),
+                  padding: const EdgeInsets.all(10),
+                  child: const Icon(Icons.play_arrow,
+                      color: Colors.white, size: 28),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: VideoProgressIndicator(
+                  ctrl,
+                  allowScrubbing: true,
+                  colors: const VideoProgressColors(
+                    playedColor: kOrange,
+                    bufferedColor: Colors.white24,
+                    backgroundColor: Colors.black26,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

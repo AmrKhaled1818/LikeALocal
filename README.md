@@ -1,231 +1,352 @@
 # LikeALocal
 
-**LikeALocal** is a Flutter social app where users discover and share hidden gem locations — restaurants, cafés, parks, viewpoints, and more — through a live map, social feed, AI recommendations, and direct messaging.
+> Discover hidden gems in your city — like a local.
+
+A Flutter social app for sharing favourite local spots (restaurants, cafés, parks, viewpoints), discovering them on a map, chatting with friends, and getting AI-powered recommendations.
 
 ---
 
-## Features
+## Contents
 
-| Feature | Description |
-|---|---|
-| **Social Feed** | Infinite-scroll feed of hidden gem posts with upvote/downvote, comments, and saves |
-| **Interactive Map** | Live map of all posts with marker clustering, category filters, distance filter, and GPS navigation |
-| **Create & Edit Posts** | Post up to 5 photos, pick a map location, choose a category, and add local tips |
-| **Search & Discovery** | Full-text search across posts; Places tab groups posts about the same real-world spot |
-| **AI Assistant** | Chat with an AI that knows every post in the app and your preferences (20 msgs/day free) |
-| **Direct Messaging** | Real-time DM with any user; unread badge counts |
-| **User Profiles** | Avatar, bio, karma score, post history, and SuperUser badge for top contributors |
-| **Saved Posts** | Bookmark spots for later |
-| **Notifications** | Push (FCM) + local notifications for upvotes and messages |
-| **Preference Quiz** | Onboarding quiz that personalises AI recommendations |
-| **Dark / Light Mode** | System-aware theme with manual override |
-| **Offline Support** | Firestore persistence keeps the feed readable without a connection |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Framework | Flutter 3.5+ / Dart |
-| State Management | Provider (ChangeNotifier) |
-| Navigation | GoRouter |
-| Backend | Firebase (Auth · Firestore · Cloud Messaging) |
-| Image Hosting | Cloudinary (unsigned upload preset) |
-| Maps | flutter_map + OpenStreetMap tiles + Stadia Maps (dark mode) |
-| Location | geolocator + geocoding |
-| AI | OpenRouter API (OpenAI-compatible) |
-| Notifications | flutter_local_notifications + FCM |
+- [What it does](#what-it-does)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Getting started](#getting-started)
+  1. [Prerequisites](#1-prerequisites)
+  2. [Install](#2-install)
+  3. [Firebase](#3-firebase)
+  4. [API keys](#4-api-keys)
+  5. [Cloudinary](#5-cloudinary)
+  6. [Run the app](#6-run-the-app)
+- [Firestore](#firestore)
+- [Routes](#routes)
+- [Data models](#data-models)
+- [Build & release](#build--release)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## Download & Try (Android APK)
+## What it does
 
-A pre-built release APK is available on the [**GitHub Releases**](https://github.com/AmrKhaled1818/LikeALocal/releases) page.
+**Core**
+- Post hidden gems with up to 5 photos *or* a video, GPS pin, category, tips, dishes.
+- Infinite-scroll feed ranked by **Super User → Vibe Match → recency**.
+- Interactive map (flutter_map + Stadia tiles) with marker clustering.
+- 1:1 DMs with typing indicators and read receipts.
+- AI chat assistant (Groq, Llama 3.3 70B) aware of your preferences, location and feed.
 
-### Steps
+**Smart**
+- **Vibe Match** — 0–100% score per post from your mood + saved preferences.
+- **Mood selector** — `chill / adventurous / hungry / cultural`, instantly re-ranks the feed.
+- **AI Trip Planner** — multi-stop itinerary built from feed candidates.
+- **Live crowd indicator** — "Busy right now" / "Liveliest around 6 PM" from check-ins.
+- **AI image descriptions** — OpenRouter Nemotron auto-describes uploads.
+- **Place grouping** — posts about the same spot are merged with combined reviews.
 
-1. Go to [Releases](https://github.com/AmrKhaled1818/LikeALocal/releases) and download the latest `app-release.apk`.
-2. On your Android device open **Settings → Security** and enable **Install unknown apps** for your browser or Files app.
-3. Open the downloaded APK and tap **Install**.
-4. Launch **LikeALocal**, create an account or sign in with Google, and start exploring.
-
-> The APK uses shared Firebase + Cloudinary + OpenRouter back-ends, so everything works out of the box — no API key setup required.
-
----
-
-## Run From Source (with your own keys)
-
-### Prerequisites
-
-- Flutter SDK ≥ 3.5 ([install guide](https://docs.flutter.dev/get-started/install))
-- Android Studio or VS Code with Flutter/Dart extensions
-- A Firebase project (free Spark plan is enough)
-- A Cloudinary account (free tier)
-- An OpenRouter account for the AI feature (free models available)
-- A Stadia Maps API key for dark-mode map tiles (free tier available — light tiles use OpenStreetMap and need no key)
-
-### 1 — Clone
-
-```bash
-git clone https://github.com/AmrKhaled1818/LikeALocal.git
-cd LikeALocal
-```
-
-### 2 — Firebase setup
-
-1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com).
-2. Add an **Android app** (package name: `com.likealocal.app`).
-3. Download `google-services.json` and place it at `android/app/google-services.json`.
-4. Enable **Email/Password** and **Google** sign-in in Authentication.
-5. Create a **Firestore** database in production mode.
-6. Install the FlutterFire CLI and run:
-
-```bash
-dart pub global activate flutterfire_cli
-flutterfire configure
-```
-
-This regenerates `lib/firebase_options.dart` for your project.
-
-### 3 — Create your API config file
-
-Create `lib/core/constants/app_config.dart` (this file is gitignored — never commit it):
-
-```dart
-class AppConfig {
-  // OpenRouter (AI chat) — https://openrouter.ai
-  static const openRouterApiKey  = 'sk-or-v1-YOUR_KEY';
-  static const openRouterModel   = 'openai/gpt-4o-mini';          // or any free model
-  static const openRouterBaseUrl = 'https://openrouter.ai/api/v1';
-
-  // Stadia Maps (dark-mode tiles) — https://stadiamaps.com
-  // Light-mode tiles use OpenStreetMap and need no key.
-  static const stadiaMapsApiKey  = 'YOUR_STADIA_KEY';
-
-  // Cloudinary — https://cloudinary.com
-  // Create an unsigned upload preset named "likealocal_unsigned"
-  static const cloudinaryCloudName    = 'YOUR_CLOUD_NAME';
-  static const cloudinaryUploadPreset = 'likealocal_unsigned';
-}
-```
-
-### 4 — Install dependencies and run
-
-```bash
-flutter pub get
-flutter run                  # debug on connected device / emulator
-flutter run --release        # release build (requires signing config)
-```
-
-### 5 — Build a release APK
-
-Configure signing by creating `android/key.properties` (gitignored):
-
-```
-storePassword=YOUR_STORE_PASSWORD
-keyPassword=YOUR_KEY_PASSWORD
-keyAlias=YOUR_KEY_ALIAS
-storeFile=C:\\path\\to\\your.jks
-```
-
-Generate a keystore if you don't have one:
-
-```bash
-keytool -genkey -v -keystore my-release-key.jks \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -alias my-key-alias
-```
-
-Then build:
-
-```bash
-flutter build apk --release          # single APK
-flutter build apk --split-per-abi    # smaller per-architecture APKs
-```
-
-Output is at `build/app/outputs/flutter-apk/app-release.apk`.
+**Social**
+- Email + Google sign-in (Firebase Auth).
+- Karma points (post +10, upvote received +2, comment +1, DM +3, check-in +1).
+- **Super User** auto-promotion at 100 karma — amber badge, posts pinned, unlimited AI.
+- Save posts → background **proximity alert** when you're within 500 m.
 
 ---
 
-## Project Structure
+## Tech stack
+
+| Layer | Tools |
+|------|-------|
+| **Framework** | Flutter (Dart `^3.5.0`) |
+| **State** | `provider` (ChangeNotifier) |
+| **Routing** | `go_router` (5-tab `StatefulShellRoute`) |
+| **Backend** | Firebase: Auth, Firestore, Storage, Messaging |
+| **Maps** | `flutter_map` + Stadia Maps, `geolocator`, `geocoding` |
+| **Media** | Cloudinary (`cloudinary_public`) |
+| **AI** | Groq (chat, planner), OpenRouter (vision) |
+| **Background** | `workmanager` |
+| **Local** | `shared_preferences`, `flutter_secure_storage` |
+
+---
+
+## Project structure
 
 ```
 lib/
 ├── core/
-│   ├── constants/      # app_config.dart (gitignored), other constants
-│   ├── theme/          # app_colors.dart, app_theme.dart
-│   └── utils/          # validators, responsive layout, toast helpers, map utils
+│   ├── constants/app_config.dart      # All API keys
+│   ├── theme/                          # Colors + light/dark themes
+│   ├── services/proximity_service.dart # Background geofence
+│   └── utils/                          # vibe_score, crowd_utils, trip_planner_util
 ├── data/
-│   ├── models/         # PostModel, UserModel, MessageModel, CommentModel, PlaceGroup
-│   ├── repositories/   # PostsRepo, AuthRepo, UserRepo, ChatRepo
-│   └── services/       # AIService, CloudinaryService, NotificationService
-├── features/
-│   ├── auth/           # LoginScreen (sign-in + sign-up + Google)
-│   ├── chat/           # ChatScreen, ConversationScreen, FriendsSidebar
-│   ├── create/         # CreatePostScreen, LocationPickerScreen
-│   ├── edit/           # EditPostScreen
-│   ├── faq/            # FaqScreen
-│   ├── feed/           # PostsScreen, PostDetailScreen
-│   ├── map/            # MapScreen
-│   ├── notifications/  # NotificationsScreen
-│   ├── onboarding/     # OnboardingScreen
-│   ├── profile/        # ProfileScreen
-│   ├── saved/          # SavedPostsScreen
-│   ├── search/         # SearchScreen, PlaceDetailScreen
-│   └── settings/       # SettingsScreen, PreferenceQuizScreen
+│   ├── models/                         # Post, User, Message, Comment, PlaceGroup
+│   ├── repositories/                   # Raw Firestore access
+│   ├── services/                       # AI, Vision, Cloudinary, Notifications
+│   └── seed_places.dart                # Initial curated places
+├── features/                           # One folder per screen
+│   └── auth, chat, create, edit, feed, map, profile, search, trip, ...
 ├── shared/
-│   ├── providers/      # AuthProvider, PostsProvider, ChatProvider, ThemeProvider, ...
-│   └── widgets/        # PostCard, TopBar, BottomNav, ImageViewer, SuperUserBadge, ...
-├── firebase_options.dart   # auto-generated (gitignored)
-└── main.dart
+│   ├── providers/                      # auth, posts, chat, user, theme
+│   └── widgets/                        # PostCard, VibeBadge, CrowdBadge, ...
+└── main.dart                           # Bootstrap + router
 ```
 
-### Data flow
-
-```
-Firestore / REST API
-      ↓
-  Repository        ← raw data access, no business logic
-      ↓
-  Provider          ← ChangeNotifier, holds state, calls repository
-      ↓
-  Widget            ← context.watch<Provider>()
-```
+**Data flow:** Firestore → Repository → Provider → Widget. Screens never call repos directly.
 
 ---
 
-## Firestore Collections
+## Getting started
 
-| Collection | Purpose |
-|---|---|
-| `posts/{postId}` | Post documents |
-| `users/{uid}` | User profiles + karma + preferences |
-| `chats/{chatId}` | Chat metadata (participants, lastMessage, unreadCount) |
-| `chats/{chatId}/messages/{msgId}` | Individual messages |
-| `posts/{postId}/comments/{commentId}` | Threaded comments |
-| `users/{uid}/savedPosts/{postId}` | Saved post references |
+### 1. Prerequisites
+
+- Flutter SDK 3.5+
+- Android Studio (SDK 34) **or** Xcode 15+
+- A Firebase project
+- Free accounts at: [Cloudinary](https://cloudinary.com), [Stadia Maps](https://client.stadiamaps.com), [Groq](https://console.groq.com), [OpenRouter](https://openrouter.ai) *(optional)*
+
+Install the FlutterFire CLI once:
+```bash
+dart pub global activate flutterfire_cli
+npm install -g firebase-tools
+```
+
+### 2. Install
+
+```bash
+git clone <your-repo-url> likealocal
+cd likealocal
+flutter pub get
+```
+
+### 3. Firebase
+
+To use your own Firebase project:
+
+```bash
+firebase login
+flutterfire configure
+```
+
+This regenerates `lib/firebase_options.dart`, `google-services.json` and `GoogleService-Info.plist`.
+
+In the Firebase console, enable:
+- **Authentication** → Email/Password + Google
+- **Cloud Firestore** (production mode)
+- **Storage**
+- **Cloud Messaging**
+
+For Google Sign-In on Android, add your **debug & release SHA-1** fingerprints to Firebase, then re-download `google-services.json`.
+
+### 4. API keys
+
+All keys are read via `String.fromEnvironment` in `lib/core/constants/app_config.dart`. Pass them at run time:
+
+| Variable | Required | Get it from |
+|----------|----------|-------------|
+| `GROQ_API_KEY` | Yes | https://console.groq.com |
+| `STADIA_API_KEY` | Yes | https://client.stadiamaps.com |
+| `CLOUDINARY_CLOUD_NAME` | Yes | Cloudinary dashboard |
+| `CLOUDINARY_UPLOAD_PRESET` | Yes | Cloudinary → Upload presets |
+| `OPENROUTER_API_KEY` | Optional | https://openrouter.ai/keys |
+
+The easiest way is a **`dart_define.json`** file (add it to `.gitignore`):
+
+```json
+{
+  "GROQ_API_KEY": "gsk_...",
+  "STADIA_API_KEY": "...",
+  "CLOUDINARY_CLOUD_NAME": "...",
+  "CLOUDINARY_UPLOAD_PRESET": "likealocal_unsigned",
+  "OPENROUTER_API_KEY": "sk-or-v1-..."
+}
+```
+
+### 5. Cloudinary
+
+1. Create an account.
+2. **Settings → Upload → Add upload preset**.
+3. Set **Signing mode** to **Unsigned**, name it `likealocal_unsigned`.
+4. Copy your **cloud name** and the **preset name** into your config.
+
+Images are compressed to 1080×1080 (q72) before upload. Up to **5 images OR 1 video** per post.
+
+### 6. Run the app
+
+```bash
+flutter run --dart-define-from-file=dart_define.json
+```
+
+On first launch:
+1. Splash → checks auth state
+2. New users → onboarding (4 slides, sets initial mood)
+3. Signed in → feed (5-tab shell)
+
+> **WSL users:** run `flutter run` from a **Windows terminal** or Android Studio. ADB device discovery from WSL is unreliable.
+
+---
+
+## Firestore
+
+### Collections
+
+| Path | Stores |
+|------|--------|
+| `posts/{postId}` | `PostModel` |
+| `posts/{postId}/comments/{commentId}` | `CommentModel` |
+| `users/{uid}` | `UserModel` |
+| `users/{uid}/savedPosts/{postId}` | Saved post refs |
+| `chats/{chatId}` | Metadata + typing state |
+| `chats/{chatId}/messages/{msgId}` | `MessageModel` |
 | `notifications/{uid}/items/{notifId}` | In-app notifications |
 
+AI chats use the prefix `ai_{userId}` for their chatId.
+
+### Starter security rules
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isUser(uid) { return signedIn() && request.auth.uid == uid; }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if isUser(uid);
+      match /savedPosts/{postId} {
+        allow read, write: if isUser(uid);
+      }
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'upvotes','downvotes','upvotedBy','commentCount',
+          'checkinsByHour','lastCheckinAt','bestTime'
+        ])
+      );
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read, write: if signedIn() && request.auth.uid in resource.data.participants;
+      allow create: if signedIn() && request.auth.uid in request.resource.data.participants;
+
+      match /messages/{msgId} {
+        allow read, write: if signedIn() &&
+          request.auth.uid in get(/databases/$(db)/documents/chats/$(chatId)).data.participants;
+      }
+    }
+
+    match /notifications/{uid}/items/{notifId} {
+      allow read, write: if isUser(uid);
+      allow create: if signedIn();
+    }
+  }
+}
+```
+
+> Firestore will surface a "create index" link the first time a query needs one — click it.
+
 ---
 
-## Karma & SuperUser System
+## Routes
 
-- Every post created: **+10 karma**
-- Every message sent: **+3 karma**
-- Users with `isSuperUser: true` get an amber badge and bypass the AI daily message limit
-- SuperUser status is set manually in Firestore (future: auto-promote at karma ≥ 1000)
+5-tab shell + top-level routes:
+
+| Route | Screen |
+|-------|--------|
+| `/splash` | SplashScreen |
+| `/onboarding` | Onboarding (4 slides) |
+| `/login` | Email + Google |
+| `/feed` *(tab 0)* | Ranked feed |
+| `/map` *(tab 1)* | Map view |
+| `/create` *(tab 2)* | New post |
+| `/chat` *(tab 3)* | DM list |
+| `/search` *(tab 4)* | Posts + Places |
+| `/post/:postId` | Post detail |
+| `/conversation/:chatId` | DM or AI chat |
+| `/profile` | Profile |
+| `/notifications` | Notifications |
+| `/saved` | Saved posts |
+| `/leaderboard` | Karma leaderboard |
+| `/trip` | Trip planner |
+| `/settings`, `/faq` | Misc |
 
 ---
 
-## Environment Notes
+## Data models
 
-- **WSL users**: run `flutter` commands from a Windows terminal or Android Studio. Connect devices via `adb` on the Windows host.
-- **Offline**: Firestore persistence is enabled with unlimited cache — the feed remains readable without internet.
-- **AI limit**: tracked in `SharedPreferences` (`ai_count_{uid}`, `ai_reset_{uid}`), not in Firestore. Clearing chat history does not reset the counter.
+**PostModel** — `title`, `description`, `localTips`, `recommendedDishes[]`, `imageUrls[]` *(up to 5)* or `videoUrl`, `location`, `lat/lng`, `category`, `upvotes`, `downvotes`, `commentCount`, `checkinsByHour`, `bestTime`, `aiSummary`.
+
+**UserModel** — `username`, `avatarUrl`, `bio`, `karma`, `isSuperUser`, `preferences{ budget, atmosphere, favCategories[] }`, `fcmToken`.
+
+**MessageModel** — `senderId` *(`'ai'` for assistant)*, `text`, `type`, `readBy[]`, `createdAt`.
+
+**CommentModel** — `content`, `parentId` *(null = top-level, set = reply)*, `editedAt`.
+
+**Categories:** Restaurant, Café, Mall, Park, Cultural, Viewpoint, Shop.
+
+---
+
+## Build & release
+
+```bash
+flutter analyze            # lint
+flutter test               # all tests
+flutter build apk          # debug Android
+flutter build apk --release --dart-define-from-file=dart_define.json
+flutter build ios --release --dart-define-from-file=dart_define.json
+```
+
+Before publishing:
+1. Generate a release keystore.
+2. Add `signingConfigs` in `android/app/build.gradle.kts`.
+3. Add release SHA-1 to Firebase.
+4. Rotate any keys committed during development.
+
+Android notes:
+- `minSdk = 23` (required by workmanager)
+- Java 17 + core library desugaring
+- `ACCESS_BACKGROUND_LOCATION` declared for proximity scans
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Build fails on minSdk | Must be `23` — workmanager requires it |
+| Map tiles are grey | Bad / rate-limited Stadia key |
+| AI returns 401 | Bad Groq key — verify at console.groq.com |
+| AI vision missing | OpenRouter key missing or model throttled |
+| "Daily AI limit" | 20 msgs / 24h; clearing chat doesn't reset; unlimited at 100 karma |
+| Google Sign-In `ApiException: 10` | Missing SHA-1 in Firebase or stale `google-services.json` |
+| Proximity alerts silent | Grant background location + disable battery optimisation |
+| Duplicate `GlobalKey` crash | Router must live in `initState`, not `build` |
+| Firestore permission denied | Check rules; ensure user doc exists |
+| `MissingPluginException` | `flutter clean && flutter pub get`, rebuild |
+
+---
+
+## Project rules
+
+- All API keys in `lib/core/constants/app_config.dart`.
+- All Firebase calls wrapped in `try/catch`; errors via SnackBar/toast, never `print`.
+- Auth errors mapped to friendly messages.
+- Screens go through providers, never repos directly.
+- "Get Directions" uses **text query**, not raw lat/lng — pinned coords are approximate.
+- `flutter analyze` clean before every commit.
 
 ---
 
 ## License
 
-This project is for educational and portfolio purposes.
+Private / unpublished.

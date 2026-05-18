@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/utils/toast_utils.dart';
+import '../../data/repositories/chat_repo.dart';
+import '../../data/repositories/user_repo.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/providers/posts_provider.dart';
 import '../../shared/providers/user_provider.dart';
@@ -15,7 +17,11 @@ import '../../data/models/post_model.dart';
 import '../../data/models/user_model.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  /// When null, shows the current logged-in user's profile.
+  /// When set, shows the profile for that uid (read-only).
+  final String? userId;
+
+  const ProfileScreen({super.key, this.userId});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -28,10 +34,24 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<PostModel> _savedPosts = [];
   bool _loadingPosts = true;
 
+  UserModel? _otherUser;
+  bool _loadingOther = false;
+
+  bool get _isOtherProfile {
+    final authUid = context.read<AuthProvider>().uid;
+    return widget.userId != null &&
+        widget.userId!.isNotEmpty &&
+        widget.userId != authUid;
+  }
+
+  String get _targetUid {
+    return widget.userId ?? context.read<AuthProvider>().uid;
+  }
+
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: _isOtherProfile ? 1 : 2, vsync: this);
     _loadData();
   }
 
@@ -44,10 +64,24 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _loadData() async {
     final auth = context.read<AuthProvider>();
     final postsProvider = context.read<PostsProvider>();
-    if (auth.uid.isEmpty) return;
+    final targetUid = _targetUid;
+    if (targetUid.isEmpty) return;
 
-    final posts = await postsProvider.getUserPosts(auth.uid);
-    final saved = await postsProvider.getSavedPosts(auth.uid);
+    if (_isOtherProfile) {
+      setState(() => _loadingOther = true);
+      try {
+        final u = await UserRepo().getUser(targetUid);
+        if (mounted) setState(() => _otherUser = u);
+      } catch (_) {} finally {
+        if (mounted) setState(() => _loadingOther = false);
+      }
+    }
+
+    final posts = await postsProvider.getUserPosts(targetUid);
+    List<PostModel> saved = [];
+    if (!_isOtherProfile) {
+      saved = await postsProvider.getSavedPosts(auth.uid);
+    }
     if (mounted) {
       setState(() {
         _userPosts = posts;
@@ -74,8 +108,104 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  Future<void> _messageUser(UserModel target) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.uid.isEmpty || target.uid.isEmpty) return;
+    try {
+      final chatId = await ChatRepo().getOrCreateChat(auth.uid, target.uid);
+      if (mounted) context.push('/conversation/$chatId');
+    } catch (_) {
+      if (mounted) AppToast.error('Could not open chat. Try again.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isOtherProfile) {
+      return _buildOtherProfile();
+    }
+    return _buildOwnProfile();
+  }
+
+  Widget _buildOtherProfile() {
+    if (_loadingOther && _otherUser == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: kOrange)),
+      );
+    }
+    if (_otherUser == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'This user could not be loaded.',
+              style: TextStyle(color: kMutedFg),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return StreamBuilder<UserModel?>(
+      stream: UserRepo().watchUser(_otherUser!.uid),
+      initialData: _otherUser,
+      builder: (context, snap) {
+        final user = snap.data ?? _otherUser!;
+        return Scaffold(
+          body: ResponsiveBody(
+            maxWidth: AppBreakpoints.maxDetailWidth,
+            child: NestedScrollView(
+              headerSliverBuilder: (_, __) => [
+                SliverAppBar(
+                  pinned: true,
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => context.pop(),
+                  ),
+                  title: Text(user.username,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildProfileHeader(user, isOwn: false),
+                ),
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _TabBarDelegate(
+                    TabBar(
+                      controller: _tabCtrl,
+                      labelColor: kOrange,
+                      unselectedLabelColor: kMutedFg,
+                      indicatorColor: kOrange,
+                      indicatorWeight: 2.5,
+                      tabs: [
+                        Tab(text: 'Posts (${_userPosts.length})'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              body: TabBarView(
+                controller: _tabCtrl,
+                children: [
+                  _buildPostsTab(_userPosts, ownerName: user.username),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOwnProfile() {
     final auth = context.watch<AuthProvider>();
     final user = auth.userModel;
     if (user == null) {
@@ -106,7 +236,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ],
             ),
-            SliverToBoxAdapter(child: _buildProfileHeader(user)),
+            SliverToBoxAdapter(child: _buildProfileHeader(user, isOwn: true)),
             SliverPersistentHeader(
               pinned: true,
               delegate: _TabBarDelegate(
@@ -136,7 +266,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildProfileHeader(UserModel user) {
+  Widget _buildProfileHeader(UserModel user, {required bool isOwn}) {
     final progress = (user.karma / 100).clamp(0.0, 1.0);
     final remaining = (100 - user.karma).clamp(0, 100);
     final bg = Theme.of(context).colorScheme.surface;
@@ -163,7 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             Positioned(
               bottom: -44,
               child: GestureDetector(
-                onTap: _editAvatar,
+                onTap: isOwn ? _editAvatar : null,
                 child: Stack(
                   children: [
                     Container(
@@ -190,21 +320,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                             : null,
                       ),
                     ),
-                    Positioned(
-                      bottom: 2,
-                      right: 2,
-                      child: Container(
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          color: kOrange,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                    if (isOwn)
+                      Positioned(
+                        bottom: 2,
+                        right: 2,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: kOrange,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const Icon(Icons.camera_alt,
+                              color: Colors.white, size: 12),
                         ),
-                        child: const Icon(Icons.camera_alt,
-                            color: Colors.white, size: 12),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -270,11 +401,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                     thickness: 1,
                     color: kMutedFg.withValues(alpha: 0.2)),
                 _statCell('Karma', '${user.karma}'),
-                VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: kMutedFg.withValues(alpha: 0.2)),
-                _statCell('Saved', '${_savedPosts.length}'),
+                if (isOwn) ...[
+                  VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: kMutedFg.withValues(alpha: 0.2)),
+                  _statCell('Saved', '${_savedPosts.length}'),
+                ],
               ],
             ),
           ),
@@ -282,26 +415,47 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         const SizedBox(height: 16),
 
-        // ── Edit Profile button ───────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _showEditProfileSheet(context),
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: const Text('Edit Profile',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kOrange,
-                side: const BorderSide(color: kOrange),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+        // ── Action button: Edit Profile (own) or Message (other) ──────────
+        if (isOwn)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showEditProfileSheet(context),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text('Edit Profile',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kOrange,
+                  side: const BorderSide(color: kOrange),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          )
+        else if (user.chatEnabled)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _messageUser(user),
+                icon: const Icon(Icons.message_outlined, size: 16),
+                label: const Text('Message',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ),
           ),
-        ),
 
         const SizedBox(height: 12),
 
@@ -383,7 +537,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     minHeight: 7,
                   ),
                 ),
-                if (!user.isSuperUser) ...[
+                if (isOwn && !user.isSuperUser) ...[
                   const SizedBox(height: 6),
                   const Text('Post, upvote, and engage to earn karma!',
                       style: TextStyle(color: kMutedFg, fontSize: 11)),
@@ -703,11 +857,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // ── Tab content ────────────────────────────────────────────────────────────
 
-  Widget _buildPostsTab(List<PostModel> posts) {
+  Widget _buildPostsTab(List<PostModel> posts, {String? ownerName}) {
     if (_loadingPosts) {
       return const Center(child: CircularProgressIndicator(color: kOrange));
     }
     if (posts.isEmpty) {
+      final isOther = ownerName != null;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -715,16 +870,22 @@ class _ProfileScreenState extends State<ProfileScreen>
             Icon(Icons.post_add_outlined,
                 size: 56, color: kMutedFg.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
-            const Text('No posts yet',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            Text(isOther ? 'No posts yet' : 'No posts yet',
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            const Text('Share your first hidden gem!',
-                style: TextStyle(color: kMutedFg)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => context.go('/create'),
-              child: const Text('Create Post'),
-            ),
+            Text(
+                isOther
+                    ? '$ownerName hasn\'t shared any gems yet.'
+                    : 'Share your first hidden gem!',
+                style: const TextStyle(color: kMutedFg)),
+            if (!isOther) ...[
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => context.go('/create'),
+                child: const Text('Create Post'),
+              ),
+            ],
           ],
         ),
       );

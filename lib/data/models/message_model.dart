@@ -4,10 +4,11 @@ class MessageModel {
   final String msgId;
   final String senderId;
   final String text;
-  final String type; // text, image, ai_response
+  final String type; // text, image, video, ai_response
   final Timestamp createdAt;
   final List<String> readBy;
   final String imageUrl; // non-empty for type == 'image'
+  final String videoUrl; // non-empty for type == 'video'
 
   MessageModel({
     required this.msgId,
@@ -17,6 +18,7 @@ class MessageModel {
     Timestamp? createdAt,
     List<String>? readBy,
     this.imageUrl = '',
+    this.videoUrl = '',
   })  : createdAt = createdAt ?? Timestamp.now(),
         readBy = readBy ?? [];
 
@@ -29,6 +31,7 @@ class MessageModel {
       createdAt: map['createdAt'] ?? Timestamp.now(),
       readBy: List<String>.from(map['readBy'] ?? []),
       imageUrl: map['imageUrl'] ?? '',
+      videoUrl: map['videoUrl'] ?? '',
     );
   }
 
@@ -40,6 +43,7 @@ class MessageModel {
       'createdAt': createdAt,
       'readBy': readBy,
       'imageUrl': imageUrl,
+      'videoUrl': videoUrl,
     };
   }
 }

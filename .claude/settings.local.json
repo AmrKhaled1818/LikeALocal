@@ -115,7 +115,10 @@
       "Bash(sed -n '370,385p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/chat/conversation_screen.dart)",
       "Bash(sed -n '845,860p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/chat/conversation_screen.dart)",
       "Bash(sed -n '168,185p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)",
-      "Bash(sed -n '327,345p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)"
+      "Bash(sed -n '327,345p' /mnt/c/Users/Dell/Desktop/Mobile_Project/lib/features/create/create_post_screen.dart)",
+      "Read(//tmp/**)",
+      "Bash(base64 -w0 /tmp/cafe.jpg)",
+      "Bash(export B64=$\\(base64 -w0 /tmp/cafe.jpg\\))"
     ]
   }
 }

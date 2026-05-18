@@ -323,49 +323,82 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         // User row
                         Row(
                           children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundImage: _resolveAvatar(post, auth).isNotEmpty
-                                  ? CachedNetworkImageProvider(_resolveAvatar(post, auth))
-                                  : null,
-                              backgroundColor: kOrange,
-                              child: _resolveAvatar(post, auth).isEmpty
-                                  ? Text(
-                                      post.username
-                                          .substring(0, 1)
-                                          .toUpperCase(),
-                                      style: const TextStyle(
-                                          color: Colors.white),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(post.username,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600)),
-                                    if (post.isSuperUser) ...[
-                                      const SizedBox(width: 6),
-                                      const SuperUserBadge(),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () =>
+                                    context.push('/user/${post.userId}'),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 18,
+                                        backgroundImage:
+                                            _resolveAvatar(post, auth)
+                                                    .isNotEmpty
+                                                ? CachedNetworkImageProvider(
+                                                    _resolveAvatar(post, auth))
+                                                : null,
+                                        backgroundColor: kOrange,
+                                        child: _resolveAvatar(post, auth)
+                                                .isEmpty
+                                            ? Text(
+                                                post.username
+                                                    .substring(0, 1)
+                                                    .toUpperCase(),
+                                                style: const TextStyle(
+                                                    color: Colors.white),
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(post.username,
+                                                      style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w600),
+                                                      overflow: TextOverflow
+                                                          .ellipsis),
+                                                ),
+                                                if (post.isSuperUser) ...[
+                                                  const SizedBox(width: 6),
+                                                  const SuperUserBadge(),
+                                                ],
+                                              ],
+                                            ),
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                    Icons.location_on_outlined,
+                                                    size: 12,
+                                                    color: kMutedFg),
+                                                Flexible(
+                                                  child: Text(post.location,
+                                                      style: const TextStyle(
+                                                          color: kMutedFg,
+                                                          fontSize: 12),
+                                                      overflow: TextOverflow
+                                                          .ellipsis),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
-                                  ],
+                                  ),
                                 ),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on_outlined,
-                                        size: 12, color: kMutedFg),
-                                    Text(post.location,
-                                        style: const TextStyle(
-                                            color: kMutedFg, fontSize: 12)),
-                                  ],
-                                ),
-                              ],
+                              ),
                             ),
-                            const Spacer(),
                             _MessageOwnerButton(post: post),
                           ],
                         ),
