@@ -44,10 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Secrets — DO NOT COMMIT
-lib/core/constants/app_config.dart
-lib/firebase_options.dart
-android/app/google-services.json
+# Secrets — real key files must never be committed
+# app_config.dart, firebase_options.dart, and google-services.json now contain
+# placeholder values and ARE tracked. Keep your real keys in a local-only copy
+# (e.g. app_config.local.dart) or pass them via --dart-define at build time.
 scripts/firebase-key.json
 **/*service-account*.json
 **/*firebase-key*.json
